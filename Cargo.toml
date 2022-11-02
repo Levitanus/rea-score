@@ -1,0 +1,16 @@
+[workspace]
+members = ["rea-score", "rea-score-test"]
+
+[workspace.dependencies]
+reaper-low = { path = "../reaper-rs/main/low" }
+reaper-medium = { path = "../reaper-rs/main/medium" }
+reaper-macros = { path = "../reaper-rs/main/macros" }
+reaper-high = { path = "../reaper-rs/main/high" }
+reaper-levitanus = { path = "../reaper-levitanus" }
+
+derivative = "2.2"
+
+fraction = "0.12"
+
+log = "0.4"
+env_logger = "0.9"

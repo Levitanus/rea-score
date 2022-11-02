@@ -1,0 +1,43 @@
+[package]
+name = "rea-score"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+reaper-low = {workspace = true}
+reaper-medium = {workspace = true}
+reaper-macros = {workspace = true}
+reaper-high = {workspace = true}
+reaper-levitanus = {workspace = true}
+
+derivative = {workspace = true}
+
+fraction = {workspace = true}
+
+log  = {workspace = true}
+
+# egui = "0.19"
+# egui_glow = { version = "0.19", optional = true }
+# keyboard-types = { version = "0.6.1", default-features = false }
+# baseview = { git = "https://github.com/RustAudio/baseview.git", rev = "eae4033e7d2cc9c31ccaa2794d5d08eedf2f510c" }
+# egui-baseview = { git = "https://github.com/BillyDM/egui-baseview" }
+# raw-window-handle = "0.4.2"
+# copypasta = "0.8"
+
+# reaper-levitanus = { path = "../../reaper-levitanus" }
+
+# [features]
+# default = ["opengl"]
+# opengl = ["egui_glow", "baseview/opengl"]
+
+
+[lib]
+name = "rea_score"
+crate-type = ["cdylib", "lib"]
+
+# [build-dependencies]
+# bindgen = "0.61"
+# cc = "1.0"
+# pkg-config = "0.3"
