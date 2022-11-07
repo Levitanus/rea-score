@@ -43,7 +43,7 @@ impl Position {
     }
 }
 
-#[derive(Debug, PartialEq, PartialOrd)]
+#[derive(Debug, PartialEq, PartialOrd, Clone)]
 pub struct TimeSignature {
     pub numerator: u32,
     pub denominator: u32,

@@ -1,4 +1,3 @@
-use fraction::Fraction;
 use rea_score::{
     self,
     reaper::{get_track_items, Measure, Position, TimeSignature},

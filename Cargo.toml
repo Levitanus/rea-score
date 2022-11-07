@@ -14,3 +14,6 @@ fraction = "0.12"
 
 log = "0.4"
 env_logger = "0.9"
+
+once_cell = "1.16"
+musical-note = "0.1"

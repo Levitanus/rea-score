@@ -12,11 +12,15 @@ reaper-macros = {workspace = true}
 reaper-high = {workspace = true}
 reaper-levitanus = {workspace = true}
 
+musical-note = {workspace = true}
+
 derivative = {workspace = true}
 
 fraction = {workspace = true}
 
 log  = {workspace = true}
+env_logger = {workspace = true}
+once_cell = {workspace = true}
 
 # egui = "0.19"
 # egui_glow = { version = "0.19", optional = true }
