@@ -1,9 +1,10 @@
 use std::ops::{Add, Sub};
 
 use fraction::Fraction;
+use rea_rs::TimeSignature;
 use reaper_medium::PositionInQuarterNotes;
 
-use super::{limit_denominator, TimeSignature, LIMIT_DENOMINATOR};
+use super::{limit_denominator, LIMIT_DENOMINATOR};
 
 #[derive(Debug, PartialOrd, Clone)]
 pub struct Length {

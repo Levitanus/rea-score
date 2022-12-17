@@ -1,26 +1,21 @@
 [package]
+edition = "2021"
 name = "rea-score"
 version = "0.1.0"
-edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+rea-rs = {workspace = true}
 reaper-low = {workspace = true}
-reaper-medium = {workspace = true}
 reaper-macros = {workspace = true}
-reaper-high = {workspace = true}
-reaper-levitanus = {workspace = true}
+reaper-medium = {workspace = true}
 
 musical-note = {workspace = true}
 
-derivative = {workspace = true}
-
-fraction = {workspace = true}
-
-log  = {workspace = true}
 env_logger = {workspace = true}
-once_cell = {workspace = true}
+fraction = {workspace = true}
+log = {workspace = true}
 
 # egui = "0.19"
 # egui_glow = { version = "0.19", optional = true }
@@ -36,12 +31,9 @@ once_cell = {workspace = true}
 # default = ["opengl"]
 # opengl = ["egui_glow", "baseview/opengl"]
 
+[dev-dependencies]
+once_cell = "1.16"
 
 [lib]
-name = "rea_score"
 crate-type = ["cdylib", "lib"]
-
-# [build-dependencies]
-# bindgen = "0.61"
-# cc = "1.0"
-# pkg-config = "0.3"
+name = "rea_score"

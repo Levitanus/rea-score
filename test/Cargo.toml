@@ -1,0 +1,18 @@
+[package]
+edition = "2021"
+name = "reaper-test-extension-plugin"
+publish = false
+version = "0.1.0"
+
+[dependencies]
+env_logger = {workspace = true}
+log = {workspace = true}
+rea-score = {path = "../rea-score"}
+reaper-low = {workspace = true}
+reaper-macros = {workspace = true}
+reaper-medium = {workspace = true}
+reaper-test = {git = "https://github.com/Levitanus/reaper-test"}
+
+[lib]
+crate-type = ["cdylib"]
+name = "reaper_test_extension_plugin"

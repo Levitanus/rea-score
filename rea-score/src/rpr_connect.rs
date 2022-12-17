@@ -1,7 +1,5 @@
-use reaper_high::Reaper;
-
 use reaper_medium::{
-    MediaItem, MediaItemTake, MediaTrack, PositionInPPQ, PositionInQuarterNotes, PositionInSeconds,
+    MediaItem, MediaItemTake, MediaTrack, PositionInPpq, PositionInQuarterNotes, PositionInSeconds,
 };
 
 #[derive(Debug, PartialEq, PartialOrd)]
@@ -28,7 +26,7 @@ impl Position {
     pub fn from_ppq(take: MediaItemTake, ppq: f64) -> Self {
         let rpr = Reaper::get().medium_reaper();
         unsafe {
-            let qn = rpr.midi_get_proj_qn_from_ppq_pos(take, PositionInPPQ::new(ppq));
+            let qn = rpr.midi_get_proj_qn_from_ppq_pos(take, PositionInPpq::new(ppq));
             Self::from_beats(qn)
         }
     }
@@ -108,11 +106,15 @@ pub fn get_track_items(track: MediaTrack) -> Option<Vec<MediaItem>> {
     let mut out: Vec<MediaItem> = Vec::new();
     for idx in 0..rpr.count_media_items(pr) {
         let item = rpr.get_media_item(pr, idx);
-        if item.is_none(){
+        if item.is_none() {
             log::error!("get_track_items loop found None at index {:?}", idx);
             break;
         }
-        out.push(item.unwrap());
+        unsafe {
+            if rpr.get_media_item_track(item.unwrap()).unwrap() == track {
+                out.push(item.unwrap());
+            }
+        }
     }
     Some(out)
 }

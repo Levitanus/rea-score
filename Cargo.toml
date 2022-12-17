@@ -1,19 +1,21 @@
 [workspace]
-members = ["rea-score", "rea-score-test"]
+members = ["rea-score", "test"]
 
 [workspace.dependencies]
-reaper-low = { path = "../reaper-rs/main/low" }
-reaper-medium = { path = "../reaper-rs/main/medium" }
-reaper-macros = { path = "../reaper-rs/main/macros" }
-reaper-high = { path = "../reaper-rs/main/high" }
-reaper-levitanus = { path = "../reaper-levitanus" }
+# rea-rs = {git = "https://github.com/Levitanus/rea-rs"}
+rea-rs = {path = "../rea-rs-workspace/rea-rs"}
+reaper-low = "0.1.0"
+reaper-macros = "0.1.0"
+reaper-medium = "0.1.0"
 
 derivative = "2.2"
-
+env_logger = "0.10"
 fraction = "0.12"
-
 log = "0.4"
-env_logger = "0.9"
 
-once_cell = "1.16"
 musical-note = "0.1"
+
+[patch.crates-io]
+reaper-low = {git = "https://github.com/Levitanus/reaper-rs", branch = "stable_for_rea-rs"}
+reaper-macros = {git = "https://github.com/Levitanus/reaper-rs", branch = "stable_for_rea-rs"}
+reaper-medium = {git = "https://github.com/Levitanus/reaper-rs", branch = "stable_for_rea-rs"}

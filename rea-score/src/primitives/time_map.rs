@@ -1,16 +1,19 @@
 //! Main "ruler" for making voices and moving through score.
 use std::collections::HashMap;
 
+use rea_rs::TimeSignature;
+
 use super::{
     position::{AbsolutePosition, RelativePosition},
-    Length, TimeSignature,
+    Length,
 };
-type TimeMapMeasures = HashMap<u32, MeasureInfo>;
+pub type TimeMapMeasures = HashMap<u32, MeasureInfo>;
 
 /// Represents area of timeline, that should be exported.
 ///
 /// Considered to be used as reference for building voices, navigating
 /// through them and converting positions from absolute to relative.
+#[derive(Debug)]
 pub struct TimeMap {
     /// indexes are measure numbers on timeline (1-based)
     measures: TimeMapMeasures,
@@ -105,19 +108,27 @@ pub struct MeasureInfo {
     pub time_signature: TimeSignature,
     pub length: Length,
 }
+impl MeasureInfo {
+    pub fn new(index: u32, time_signature: TimeSignature) -> Self {
+        let length = Length::from(&time_signature);
+        Self {
+            index,
+            time_signature,
+            length,
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
 
     use fraction::Fraction;
+    use rea_rs::TimeSignature;
 
-    use crate::{
-        primitives::{
-            position::{AbsolutePosition, RelativePosition},
-            Length,
-        },
-        reaper::TimeSignature,
+    use crate::primitives::{
+        position::{AbsolutePosition, RelativePosition},
+        Length,
     };
 
     use super::{MeasureInfo, TimeMap, TimeMapMeasures};

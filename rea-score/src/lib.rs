@@ -5,8 +5,9 @@
 // use reaper_medium::ReaperSession;
 // use std::error::Error;
 
-pub mod reaper;
+pub mod dom;
 pub mod primitives;
+// pub mod rpr_connect;
 
 // #[reaper_extension_plugin]
 // fn plugin_main(context: PluginContext) -> Result<(), Box<dyn Error>> {
