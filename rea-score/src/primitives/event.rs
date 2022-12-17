@@ -2,7 +2,7 @@
 use super::{Length, Pitch, RelativePosition};
 
 /// Can be considered as "Generic" Event.
-/// 
+///
 /// EventInfo is more about position and length, while
 /// EventType responds for Event-representation and rendering.
 #[derive(Debug, PartialEq, PartialOrd, Clone)]
@@ -214,6 +214,11 @@ impl Default for EventType {
 #[derive(Debug, PartialEq, PartialOrd, Clone)]
 pub struct Note {
     pub pitch: Pitch,
+}
+impl Note {
+    pub fn new(pitch: Pitch) -> Self {
+        Self { pitch }
+    }
 }
 
 /// TODO: think on sorting events.

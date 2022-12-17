@@ -1,10 +1,28 @@
 use std::{collections::HashMap, sync::Arc};
 
-use crate::primitives::{Measure, TimeMap};
+use crate::primitives::{EventInfo, Measure, TimeMap};
 
+#[derive(Debug)]
 pub struct Voice {
-    time_map: Arc<TimeMap>,
-    measures: HashMap<u32, Measure>,
+    pub time_map: Arc<TimeMap>,
+    pub measures: HashMap<u32, Measure>,
+}
+impl Voice {
+    pub fn insert_event(&mut self, event: EventInfo) -> Result<(), String> {
+        let index = event.position.get_measure_index();
+        let head = self
+            .measures
+            .get_mut(&index)
+            .ok_or(format!("Can not find measure {}", index))?
+            .insert(event)?;
+        match head {
+            None => Ok(()),
+            Some(head) => {
+                println!("got head: {:?}", head);
+                self.insert_event(head)
+            }
+        }
+    }
 }
 impl From<Arc<TimeMap>> for Voice {
     fn from(time_map: Arc<TimeMap>) -> Self {
@@ -18,11 +36,16 @@ impl From<Arc<TimeMap>> for Voice {
 
 #[cfg(test)]
 mod tests {
+    use fraction::Fraction;
+    use musical_note::Accidental;
     use once_cell::sync::OnceCell;
     use rea_rs::TimeSignature;
     use std::sync::Arc;
 
-    use crate::primitives::{AbsolutePosition, MeasureInfo, TimeMap, TimeMapMeasures};
+    use crate::primitives::{
+        AbsolutePosition, EventInfo, EventType, Length, Measure, MeasureInfo,
+        Note, Pitch, RelativePosition, TimeMap, TimeMapMeasures,
+    };
     static TIME_MAP: OnceCell<Arc<TimeMap>> = OnceCell::new();
 
     use super::Voice;
@@ -47,7 +70,42 @@ mod tests {
     }
 
     #[test]
-    fn test_voice() {
-        let voice_1 = Voice::from(get_time_map());
+    fn test_voice() -> Result<(), String> {
+        env_logger::init();
+        let mut voice_1 = Voice::from(get_time_map());
+        // println!("voice:contents before: {:#?}", voice_1);
+
+        assert_eq!(
+            voice_1.measures.get(&2).unwrap(),
+            &Measure::new(2, TimeSignature::new(4, 4))
+        );
+        assert_eq!(
+            voice_1.measures.get(&4).unwrap(),
+            &Measure::new(4, TimeSignature::new(7, 8))
+        );
+        let c = EventInfo::new(
+            RelativePosition::new(3, Fraction::new(6_u64, 8_u64)),
+            Length::from(Fraction::new(5_u64, 8_u64)),
+            EventType::Note(Note::new(Pitch::from_midi(60, None, None))),
+        );
+        let es = EventInfo::new(
+            RelativePosition::new(3, Fraction::new(6_u64, 8_u64)),
+            Length::from(Fraction::new(5_u64, 8_u64)),
+            EventType::Note(Note::new(Pitch::from_midi(
+                63,
+                Accidental::Flat.into(),
+                None,
+            ))),
+        );
+        let g = EventInfo::new(
+            RelativePosition::new(4, Fraction::new(0_u64, 8_u64)),
+            Length::from(Fraction::new(3_u64, 8_u64)),
+            EventType::Note(Note::new(Pitch::from_midi(67, None, None))),
+        );
+        voice_1.insert_event(c)?;
+        voice_1.insert_event(g)?;
+        voice_1.insert_event(es)?;
+
+        Ok(())
     }
 }

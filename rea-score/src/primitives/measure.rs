@@ -19,7 +19,9 @@ use std::collections::VecDeque;
 use fraction::Fraction;
 use rea_rs::TimeSignature;
 
-use super::{Chord, EventInfo, EventType, Length, MeasureInfo, RelativePosition};
+use super::{
+    Chord, EventInfo, EventType, Length, MeasureInfo, RelativePosition,
+};
 
 #[derive(Debug, PartialEq)]
 pub struct Measure {
@@ -144,14 +146,21 @@ impl Measure {
     ///     ))
     /// );
     /// ```
-    pub fn insert(&mut self, event: EventInfo) -> Result<Option<EventInfo>, String> {
+    pub fn insert(
+        &mut self,
+        event: EventInfo,
+    ) -> Result<Option<EventInfo>, String> {
         // let mut event = event;
         let mut idx = self
             .events
             .iter()
             .position(|evt| evt.contains_pos(&event.position))
-            .ok_or("Can not find place for event")?;
-        let (event, append_to_self) = self.resolve_event_overlaps(event, idx)?;
+            .ok_or(format!(
+                "Can not find place for event with position: {:?}",
+                event.position
+            ))?;
+        let (event, append_to_self) =
+            self.resolve_event_overlaps(event, idx)?;
 
         // be sure, length and position of event and current are equal
         let mut current = &mut self.events[idx];
@@ -167,7 +176,9 @@ impl Measure {
         // we can replace old event by the new one, which is constructed below.
         let new_event = match &current.event {
             EventType::Rest => event.event,
-            EventType::Chord(chord) => EventType::Chord(chord.clone().push(event.event)?),
+            EventType::Chord(chord) => {
+                EventType::Chord(chord.clone().push(event.event)?)
+            }
             EventType::Note(note) => EventType::Chord(
                 Chord::new()
                     .push(EventType::Note(note.clone()))?
@@ -179,34 +190,43 @@ impl Measure {
         // make sure, nothing is lost:
         match append_to_self {
             None => Ok(None),
-            Some(head) => {
+            Some(mut head) => {
+                // if head starts in the next measure, return it completely.
+                if head.position.get_position() == self.length.get() {
+                    head.position.set_measure_index(self.index + 1);
+                    head.position.set_position(Fraction::from(0.0));
+                    return Ok(Some(head));
+                }
                 // if head is longer then measure, insert our part recursively,
-                // and return head to the caller, to insert to the next measure.
+                // and return head to the caller, to insert to the next
+                // measure.
                 if head.get_end_position().get_position() > self.length.get() {
                     let mut current = head;
                     // head =
-                    //     current.cut_head(Length::from(self.length.get() - current.length.get()))?;
-                    let mut head = current.cut_head_at_position(&RelativePosition::new(
-                        self.index,
-                        self.length.get(),
-                    ))?;
+                    //     current.cut_head(Length::from(self.length.get() -
+                    // current.length.get()))?;
+                    let mut head = current.cut_head_at_position(
+                        &RelativePosition::new(self.index, self.length.get()),
+                    )?;
                     head.position.set_position(Fraction::from(0.0));
                     head.position.set_measure_index(self.index + 1);
                     // If still something left — things go bad,
                     // and it's time to return Err.
                     match self.insert(current)? {
                         None => Ok(Some(head)),
-                        Some(unexpected) => {
-                            Err(format!("unexpected head of event found: {:?}", unexpected))
-                        }
+                        Some(unexpected) => Err(format!(
+                            "unexpected head of event found: {:?}",
+                            unexpected
+                        )),
                     }
                 } else {
                     // if head is part of our measure — recursively insert it.
                     match self.insert(head)? {
                         None => Ok(None),
-                        Some(unexpected) => {
-                            Err(format!("unexpected head of event found: {:?}", unexpected))
-                        }
+                        Some(unexpected) => Err(format!(
+                            "unexpected head of event found: {:?}",
+                            unexpected
+                        )),
                     }
                 }
             }
