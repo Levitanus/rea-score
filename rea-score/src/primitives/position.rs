@@ -29,7 +29,7 @@
 //! Relative calculations are possible with providing of `TimeMap`,
 //! or with accessing of reaper API (which is hard to make from test code).
 //!
-//! ```
+//! ```no_run
 //! use std::collections::HashMap;
 //! use fraction::Fraction;
 //! use rea_score::primitives::position::{
