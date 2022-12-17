@@ -26,7 +26,10 @@ pub struct TimeMap {
 }
 impl TimeMap {
     /// be careful with start position
-    pub fn new(measures: HashMap<u32, MeasureInfo>, start_position: AbsolutePosition) -> Self {
+    pub fn new(
+        measures: HashMap<u32, MeasureInfo>,
+        start_position: AbsolutePosition,
+    ) -> Self {
         let (mut begin, mut end) = (0u32, 0u32);
         for idx in measures.keys() {
             if (begin, end) == (0, 0) {
@@ -48,7 +51,10 @@ impl TimeMap {
     }
     /// Get absolute position of measure start.
     /// Index is 1-based.
-    pub fn get_absolute_position_of_measure(&self, measure_index: u32) -> AbsolutePosition {
+    pub fn get_absolute_position_of_measure(
+        &self,
+        measure_index: u32,
+    ) -> AbsolutePosition {
         let mut counted_abs = self.start_position.clone();
         for idx in self.begin..measure_index {
             let measure = &self.measures[&idx];
@@ -88,7 +94,10 @@ impl TimeMap {
             None => None,
         }
     }
-    pub fn pos_absolute_from_relative(&self, relative: &RelativePosition) -> AbsolutePosition {
+    pub fn pos_absolute_from_relative(
+        &self,
+        relative: &RelativePosition,
+    ) -> AbsolutePosition {
         let measure_index = relative.get_measure_index();
         let m_pos = self.get_absolute_position_of_measure(measure_index);
         let relative_pos = relative.get_position();
@@ -233,19 +242,30 @@ mod tests {
         );
 
         for time_map in [time_map, time_map_2].iter() {
-            let position_5 =
-                AbsolutePosition::from(Fraction::from(3.0) + Fraction::new(7u64, 8u64));
-            assert_eq!(time_map.get_absolute_position_of_measure(5), position_5);
-            let position_6 = AbsolutePosition::from(position_5.get() + Fraction::new(9u64, 8u64));
-            assert_eq!(time_map.get_absolute_position_of_measure(6), position_6);
+            let position_5 = AbsolutePosition::from(
+                Fraction::from(3.0) + Fraction::new(7u64, 8u64),
+            );
+            assert_eq!(
+                time_map.get_absolute_position_of_measure(5),
+                position_5
+            );
+            let position_6 = AbsolutePosition::from(
+                position_5.get() + Fraction::new(9u64, 8u64),
+            );
+            assert_eq!(
+                time_map.get_absolute_position_of_measure(6),
+                position_6
+            );
         }
     }
 
     #[test]
     fn test_converter() {
-        env_logger::init();
         let time_map = time_map_2();
-        let absolute = AbsolutePosition::from(Fraction::new(8 * 3 + 7 + 3 as u64, 8 as u64));
+        let absolute = AbsolutePosition::from(Fraction::new(
+            8 * 3 + 7 + 3 as u64,
+            8 as u64,
+        ));
         let relative = RelativePosition::new(5, Fraction::new(3u64, 8u64));
         assert_eq!(&time_map.pos_absolute_from_relative(&relative), &absolute);
         assert_eq!(
@@ -253,7 +273,10 @@ mod tests {
             &relative
         );
         //
-        let absolute = AbsolutePosition::from(Fraction::new(8 * 3 + 7 + 9 + 3 as u64, 8 as u64));
+        let absolute = AbsolutePosition::from(Fraction::new(
+            8 * 3 + 7 + 9 + 3 as u64,
+            8 as u64,
+        ));
         let relative = RelativePosition::new(6, Fraction::new(3u64, 8u64));
         assert_eq!(&time_map.pos_absolute_from_relative(&relative), &absolute);
         assert_eq!(
