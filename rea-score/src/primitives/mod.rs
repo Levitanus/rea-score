@@ -18,7 +18,10 @@ pub use event::{Chord, EventInfo, EventType, Note};
 pub use fraction_tools::{limit_denominator, normalize_fraction};
 pub use length::Length;
 pub use measure::Measure;
-pub use pitch::{midi_to_note, Accidental, Key, NoteName, Octave, Pitch, ResolvedPitch, Scale};
+pub use pitch::{
+    midi_to_note, Accidental, Key, NoteName, Octave, Pitch, ResolvedPitch,
+    Scale,
+};
 pub use position::{AbsolutePosition, RelativeDistance, RelativePosition};
 pub use time_map::{MeasureInfo, TimeMap, TimeMapMeasures};
 
