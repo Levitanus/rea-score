@@ -1,6 +1,8 @@
 use std::{error::Error, str::FromStr};
 
-#[derive(Debug)]
+use super::{get_token, reascore_tokens, NotationError};
+
+#[derive(Debug, PartialEq)]
 pub enum NoteNotations {
     Voice(u8),
 }
@@ -15,11 +17,13 @@ impl FromStr for NoteNotations {
     type Err = Box<dyn Error>;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.starts_with("voice") {
-            let idx: u8 = s.split(":").collect::<Vec<&str>>()[1].parse()?;
-            Ok(Self::Voice(idx))
-        } else {
-            Err(format!("Can not parse {}", s).into())
+        let tokens = reascore_tokens(s, None)?;
+        match tokens[0] {
+            "voice" => {
+                let idx = get_token(&tokens, 1)?;
+                Ok(Self::Voice(idx.parse()?))
+            }
+            x => Err(NotationError::UnexpectedToken(x.to_string()).into()),
         }
     }
 }
