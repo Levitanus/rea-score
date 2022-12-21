@@ -12,8 +12,8 @@ pub enum ResolvedPitch {
 
 #[derive(Debug, PartialEq, PartialOrd, Clone)]
 pub struct Pitch {
-    note: Note,
-    note_name: Option<String>,
+    pub note: Note,
+    pub note_name: Option<String>,
 }
 impl Pitch {
     /// note_name used to change note pitch to lilypond strings in MIDI Editor.
@@ -26,6 +26,9 @@ impl Pitch {
             note: Note::from_midi(midi, accidental),
             note_name,
         }
+    }
+    pub fn midi(&self) -> u8 {
+        self.note.midi()
     }
     pub fn resolve(&self, key: Key) -> ResolvedPitch {
         match &self.note_name {

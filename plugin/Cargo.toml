@@ -1,6 +1,7 @@
 [package]
 edition = "2021"
-name = "rea-score"
+name = "rea-score-reaper-plugin"
+publish = false
 version = "0.0.1"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -19,9 +20,8 @@ log = {workspace = true}
 fraction = {workspace = true}
 thiserror = {workspace = true}
 
-[dev-dependencies]
-once_cell = "1.16"
+rea-score = {path = "../rea-score"}
 
 [lib]
-crate-type = ["lib"]
-name = "rea_score"
+crate-type = ["cdylib"]
+name = "rea_score_plugin"

@@ -40,11 +40,7 @@ impl Measure {
         let length = Length::from(&time_signature);
         let mut events = VecDeque::new();
         let pos = RelativePosition::new(index, Fraction::from(0.0));
-        events.push_back(EventInfo {
-            position: pos,
-            length: length.clone(),
-            event: EventType::Rest,
-        });
+        events.push_back(EventInfo::new(pos, length.clone(), EventType::Rest));
         Self {
             index,
             time_signature,
@@ -84,12 +80,18 @@ impl Measure {
     /// let mut pos = RelativePosition::new(2, Fraction::from(0.0));
     /// let _1_8 = Fraction::new(1u64, 8u64);
     /// let _1_4 = Fraction::new(1u64, 4u64);
-    /// let c3 = Note {
-    ///     pitch: Pitch::from_midi(60, None, None),
-    /// };
-    /// let d3 = Note {
-    ///     pitch: Pitch::from_midi(62, None, None),
-    /// };
+    /// let c3 = Note::new(
+    ///     Pitch::from_midi(60, None, None),
+    /// );
+    /// let mut c3_tied = c3.clone();
+    /// c3_tied.set_tie(true);
+    ///
+    /// let d3 = Note::new(
+    ///     Pitch::from_midi(62, None, None),
+    /// );
+    /// let mut d3_tied = d3.clone();
+    /// d3_tied.set_tie(true);
+    ///
     /// let ev1 = EventInfo::new(
     ///     RelativePosition::new(2, _1_4 + _1_8),
     ///     Length::from(_1_8),
@@ -109,7 +111,7 @@ impl Measure {
     ///     EventInfo::new(
     ///         pos.set_position(_1_4).clone(),
     ///         Length::from(_1_8),
-    ///         EventType::Note(c3.clone()),
+    ///         EventType::Note(c3_tied.clone()),
     ///     ),
     ///     EventInfo::new(
     ///         pos.set_position(_1_4 + _1_8).clone(),
@@ -118,7 +120,7 @@ impl Measure {
     ///             Chord::new()
     ///                 .push(EventType::Note(d3.clone()))
     ///                 .unwrap()
-    ///                 .push(EventType::Note(c3.clone()))
+    ///                 .push(EventType::Note(c3_tied.clone()))
     ///                 .unwrap(),
     ///         ),
     ///     ),
@@ -137,12 +139,13 @@ impl Measure {
     ///     Length::from(_1_4 * 2),
     ///     EventType::Note(d3.clone()),
     /// ));
+    ///
     /// assert_eq!(
     ///     head.unwrap(),
     ///     Some(EventInfo::new(
     ///         RelativePosition::new(3, Fraction::from(0.0)),
     ///         Length::from(_1_4),
-    ///         EventType::Note(d3.clone()),
+    ///         EventType::Note(d3),
     ///     ))
     /// );
     /// ```

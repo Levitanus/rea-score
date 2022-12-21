@@ -7,11 +7,14 @@ version = "0.1.0"
 [dependencies]
 env_logger = {workspace = true}
 log = {workspace = true}
+rea-rs = {workspace = true}
 rea-score = {path = "../rea-score"}
 reaper-low = {workspace = true}
 reaper-macros = {workspace = true}
 reaper-medium = {workspace = true}
 reaper-test = {git = "https://github.com/Levitanus/reaper-test"}
+
+fraction = {workspace = true}
 
 [lib]
 crate-type = ["cdylib"]

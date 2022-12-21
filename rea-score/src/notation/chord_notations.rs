@@ -2,7 +2,7 @@ use std::{error::Error, str::FromStr};
 
 use super::{get_token, reascore_tokens, NotationError};
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum ChordNotations {
     Dynamics(String),
 }

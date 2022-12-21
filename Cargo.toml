@@ -1,9 +1,9 @@
 [workspace]
-members = ["rea-score", "test"]
+members = ["rea-score", "test", "plugin"]
 
 [workspace.dependencies]
-rea-rs = {git = "https://github.com/Levitanus/rea-rs"}
-# rea-rs = {path = "../rea-rs-workspace/rea-rs"}
+# rea-rs = {git = "https://github.com/Levitanus/rea-rs"}
+rea-rs = {path = "../rea-rs-workspace/rea-rs"}
 reaper-low = "0.1.0"
 reaper-macros = "0.1.0"
 reaper-medium = "0.1.0"

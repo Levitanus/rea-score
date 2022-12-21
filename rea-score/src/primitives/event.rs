@@ -5,15 +5,18 @@ use super::{Length, Pitch, RelativePosition};
 ///
 /// EventInfo is more about position and length, while
 /// EventType responds for Event-representation and rendering.
-#[derive(Debug, PartialEq, PartialOrd, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct EventInfo {
     pub position: RelativePosition,
     pub length: Length,
     pub event: EventType,
-    // event: Box<dyn Event>
 }
 impl EventInfo {
-    pub fn new(position: RelativePosition, length: Length, event: EventType) -> Self {
+    pub fn new(
+        position: RelativePosition,
+        length: Length,
+        event: EventType,
+    ) -> Self {
         return Self {
             position,
             length,
@@ -44,7 +47,8 @@ impl EventInfo {
             return false;
         }
         self.position.get_position() <= pos.get_position()
-            && self.position.get_position() + self.length.get() > pos.get_position()
+            && self.position.get_position() + self.length.get()
+                > pos.get_position()
     }
 
     /// Find if overlaps other event (e.g. if end of self > end of other)
@@ -81,7 +85,9 @@ impl EventInfo {
     /// assert_eq!(ev1.overlaps(&ev3), None);
     /// ```
     pub fn overlaps(&self, other: &Self) -> Option<Length> {
-        if self.position.get_measure_index() != other.position.get_measure_index() {
+        if self.position.get_measure_index()
+            != other.position.get_measure_index()
+        {
             return None;
         }
         let o_end = other.position.get_position() + other.length.get();
@@ -116,7 +122,7 @@ impl EventInfo {
     /// assert_eq!(ev1, ev2);
     /// ```
     pub fn cut_head(&mut self, head_length: Length) -> Result<Self, String> {
-        let (l_evt, r_evt) = self.event.split();
+        let (l_evt, r_evt) = self.event.clone().split();
         if self.length < head_length {
             return Err(format!(
                 "Trying to cut head bigger, than body: head: {:?}, body: {:?}",
@@ -158,7 +164,10 @@ impl EventInfo {
     /// ev2.position.set_position(_1_4);
     /// assert_eq!(ev1, ev2);
     /// ```
-    pub fn cut_head_at_position(&mut self, position: &RelativePosition) -> Result<Self, String> {
+    pub fn cut_head_at_position(
+        &mut self,
+        position: &RelativePosition,
+    ) -> Result<Self, String> {
         if position < &self.position {
             return Err(format!(
                 "can not cut at negative position. self: {:?}, given: {:?}",
@@ -201,8 +210,20 @@ pub enum EventType {
 }
 impl EventType {
     /// TODO! For now just clones.
-    fn split(&self) -> (Self, Self) {
-        (self.clone(), self.clone())
+    fn split(self) -> (Self, Self) {
+        let a = match self.clone() {
+            Self::Note(mut note) => {
+                note.set_tie(true);
+                Self::Note(note)
+            }
+            Self::Chord(mut ch) => {
+                ch.set_ties(true);
+                Self::Chord(ch)
+            }
+            Self::Rest => Self::Rest,
+        };
+        let b = self;
+        (a, b)
     }
 }
 impl Default for EventType {
@@ -214,10 +235,14 @@ impl Default for EventType {
 #[derive(Debug, PartialEq, PartialOrd, Clone)]
 pub struct Note {
     pub pitch: Pitch,
+    tie: bool,
 }
 impl Note {
     pub fn new(pitch: Pitch) -> Self {
-        Self { pitch }
+        Self { pitch, tie: false }
+    }
+    pub fn set_tie(&mut self, tie: bool) {
+        self.tie = tie;
     }
 }
 
@@ -232,7 +257,9 @@ impl Chord {
     }
     pub fn push(mut self, event: EventType) -> Result<Self, String> {
         match event {
-            EventType::Rest => Err(format!("Cannot push rest to chord! {:?}", event)),
+            EventType::Rest => {
+                Err(format!("Cannot push rest to chord! {:?}", event))
+            }
             EventType::Note(note) => {
                 self.notes.push(note);
                 Ok(self)
@@ -242,5 +269,8 @@ impl Chord {
                 Ok(self)
             }
         }
+    }
+    pub fn set_ties(&mut self, tie: bool) {
+        self.notes.iter_mut().map(|n| n.set_tie(tie)).count();
     }
 }

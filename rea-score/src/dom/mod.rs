@@ -2,6 +2,8 @@ use std::{collections::HashMap, sync::Arc};
 
 use crate::primitives::{EventInfo, Measure, TimeMap};
 
+pub mod midi_parse;
+
 #[derive(Debug)]
 pub struct Voice {
     pub time_map: Arc<TimeMap>,

@@ -1,4 +1,3 @@
-use std::error::Error;
 use thiserror;
 
 use rea_rs::midi::Notation as MNotation;
@@ -21,7 +20,7 @@ pub enum NotationError {
     #[error("Unexpected Token: {0}")]
     UnexpectedToken(String),
 }
-pub type NotationResult<T> = Result<T, Box<dyn Error>>;
+pub type NotationResult<T> = Result<T, NotationError>;
 
 // base notation strings should look like:
 // "NOTE 0 60 Voice 1 text ReaScore|voice:2|dynamics:\mf"
@@ -35,16 +34,20 @@ const NOTATION_DELIMITER: &'static str = "|";
 const TOKENS_DELIMITER: &'static str = ":";
 
 /// Get reascore notations, if any.
-fn notations_from_midi(msg: NotationMessage) -> Option<Vec<NotationType>> {
+pub fn notations_from_midi(msg: NotationMessage) -> Option<Vec<NotationType>> {
     match msg.notation() {
-        MNotation::Note(ch, nt, tk) => {
-            let tokens = reascore_notation_string(tk)?;
-            let notes = tokens.iter().filter_map(|tk| {
-                Some(NotationType::Note(ch, nt, tk.parse().ok()?))
-            });
-            let chords = tokens.iter().filter_map(|tk| {
-                Some(NotationType::Chord(ch, nt, tk.parse().ok()?))
-            });
+        MNotation::Note {
+            channel: _,
+            note: _,
+            tokens,
+        } => {
+            let tokens = reascore_notation_string(tokens)?;
+            let notes = tokens
+                .iter()
+                .filter_map(|tk| Some(NotationType::Note(tk.parse().ok()?)));
+            let chords = tokens
+                .iter()
+                .filter_map(|tk| Some(NotationType::Chord(tk.parse().ok()?)));
             Some(notes.chain(chords).collect())
         }
         MNotation::Track(_) => todo!(),
@@ -58,7 +61,6 @@ fn reascore_notation_string(tokens: Vec<String>) -> Option<Vec<String>> {
         .into_iter()
         .filter(|tk| tk.starts_with(SECTION))
         .collect();
-    println!("{:?}", v);
     match v.len() {
         0 => None,
         1 => Some(
@@ -89,9 +91,11 @@ fn reascore_tokens(
         Some(am) => {
             let mut v = Vec::new();
             for idx in 0..am {
-                v.push(split.next().ok_or(Box::new(
-                    NotationError::NotEnoughTokens(am, idx),
-                ))?)
+                v.push(
+                    split
+                        .next()
+                        .ok_or(NotationError::NotEnoughTokens(am, idx))?,
+                )
             }
             split
                 .next()
@@ -102,6 +106,7 @@ fn reascore_tokens(
     }
 }
 
+/// Try to get token from vec, and return [NotationError] at fail.
 fn get_token<'a>(
     v: &'a Vec<&str>,
     idx: usize,
@@ -111,13 +116,13 @@ fn get_token<'a>(
 }
 
 /// Handles parsing and representation of raw notation
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum NotationType {
     /// channel, note
-    Note(u8, u8, NoteNotations),
+    Note(NoteNotations),
     /// channel, note: note still presents, as chord
     /// events will be deduplicated by mapping to events.
-    Chord(u8, u8, ChordNotations),
+    Chord(ChordNotations),
     Event,
 }
 
@@ -150,21 +155,22 @@ fn test_reascore_tokens() {
 #[cfg(test)]
 #[test]
 fn test_parsing() {
-    let msg = NotationMessage::from(MNotation::Note(
-        1,
-        60,
-        vec!["text".to_string(), "ReaScore|voice:2|dyn:\\mf".to_string()],
-    ));
+    let msg = NotationMessage::from(MNotation::Note {
+        channel: 1,
+        note: 60,
+        tokens: vec![
+            "text".to_string(),
+            "ReaScore|note-head:cross|dyn:\\mf".to_string(),
+        ],
+    });
     println!("{}", msg);
     assert_eq!(
         notations_from_midi(msg).unwrap(),
         vec![
-            NotationType::Note(1, 60, NoteNotations::Voice(2)),
-            NotationType::Chord(
-                1,
-                60,
-                ChordNotations::Dynamics("\\mf".to_string())
-            )
+            NotationType::Note(NoteNotations::NoteHead(
+                note_notations::NoteHead::Cross
+            )),
+            NotationType::Chord(ChordNotations::Dynamics("\\mf".to_string()))
         ]
     );
 }
