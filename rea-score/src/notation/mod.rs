@@ -19,6 +19,11 @@ pub enum NotationError {
     TooManyTokens(u16),
     #[error("Unexpected Token: {0}")]
     UnexpectedToken(String),
+    #[error(
+        "Unexpected Notation: Can not apply notation \
+        to object: {notation}, {object}"
+    )]
+    UnexpectedNotation { notation: String, object: String },
 }
 pub type NotationResult<T> = Result<T, NotationError>;
 
@@ -113,6 +118,10 @@ fn get_token<'a>(
 ) -> Result<&'a str, NotationError> {
     let s = v.get(idx).ok_or(NotationError::NotEnoughTokens(2, 1))?;
     Ok(*s)
+}
+
+pub trait NotationRender {
+    fn render(&self, pitch_string: impl Into<String>) -> String;
 }
 
 /// Handles parsing and representation of raw notation

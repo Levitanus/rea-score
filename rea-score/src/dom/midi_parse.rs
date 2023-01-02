@@ -6,39 +6,10 @@ use rea_rs::{
 use crate::{
     notation::{notations_from_midi, NotationType},
     primitives::{
-        position::Distance, AbsolutePosition, EventInfo, EventType, Length,
-        Note, Pitch, RelativePosition,
+        position::Distance, AbsolutePosition, EventInfo, EventType, Note,
+        Pitch, RelativePosition,
     },
 };
-
-#[derive(Debug, PartialEq, Clone)]
-pub struct ParsedEvent {
-    pub position: RelativePosition,
-    pub length: Length,
-    pub channel: u8,
-    pub note: u8,
-    pub event: EventInfo,
-    pub notations: Vec<NotationType>,
-}
-impl ParsedEvent {
-    pub fn new(
-        position: RelativePosition,
-        length: Length,
-        channel: u8,
-        note: u8,
-        event: EventInfo,
-        notations: Vec<NotationType>,
-    ) -> Self {
-        Self {
-            position,
-            length,
-            channel,
-            note,
-            event,
-            notations,
-        }
-    }
-}
 
 pub fn parse_events<'a, T: ProbablyMutable>(
     events: impl Iterator<Item = MidiEvent<RawMidiMessage>> + Clone + 'a,
@@ -54,7 +25,7 @@ pub fn parse_events<'a, T: ProbablyMutable>(
             ))
         })
         .collect::<Vec<_>>();
-    let map = notes.map(move |note| {
+    let parsed_events = notes.map(move |note| {
         let position = RelativePosition::from(AbsolutePosition::from(
             Position::from_ppq(note.start_in_ppq, take),
         ));
@@ -63,8 +34,8 @@ pub fn parse_events<'a, T: ProbablyMutable>(
         ));
         let length = position.get_distance_as_length(&end_pos, None);
         let ev = EventInfo::new(
-            position.clone(),
-            length.clone(),
+            position,
+            length,
             EventType::Note(Note::new(Pitch::from_midi(
                 note.note, None, None,
             ))),
@@ -84,8 +55,6 @@ pub fn parse_events<'a, T: ProbablyMutable>(
             }
         });
         ParsedEvent::new(
-            position,
-            length,
             note.channel,
             note.note,
             ev,
@@ -95,5 +64,88 @@ pub fn parse_events<'a, T: ProbablyMutable>(
                 .collect(),
         )
     });
-    Ok(Box::new(map))
+    Ok(Box::new(parsed_events))
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct ParsedEvent {
+    pub channel: u8,
+    pub note: u8,
+    pub event: EventInfo,
+    pub notations: Vec<NotationType>,
+}
+impl ParsedEvent {
+    pub fn new(
+        channel: u8,
+        note: u8,
+        event: EventInfo,
+        notations: Vec<NotationType>,
+    ) -> Self {
+        Self {
+            channel,
+            note,
+            event,
+            notations,
+        }
+    }
+
+    /// Push to event every notations possible, leaving those, that
+    /// can not be applied to a single event.
+    pub fn apply_single_notations(mut self) -> Self {
+        self.notations = self
+            .notations
+            .into_iter()
+            .filter_map(|not| match self.event.push_notation(not.clone()) {
+                Ok(_) => None,
+                Err(_) => Some(not),
+            })
+            .collect();
+        self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use fraction::Fraction;
+
+    use crate::{
+        notation::{
+            chord_notations::ChordNotations,
+            note_notations::{NoteHead, NoteNotations},
+            NotationType,
+        },
+        primitives::{
+            EventInfo, EventType, Length, Note, Pitch, RelativePosition,
+        },
+    };
+
+    use super::ParsedEvent;
+
+    #[test]
+    fn test_apply_single_notations() {
+        let quarter = Fraction::new(1u64, 4u64);
+        let ev = ParsedEvent::new(
+            1,
+            60,
+            EventInfo::new(
+                RelativePosition::new(1, quarter),
+                Length::from(quarter * 2),
+                EventType::Note(Note::new(Pitch::from_midi(60, None, None))),
+            ),
+            vec![
+                NotationType::Note(NoteNotations::NoteHead(NoteHead::Cross)),
+                NotationType::Note(NoteNotations::Voice(1)),
+                NotationType::Chord(ChordNotations::Dynamics(
+                    r"\f".to_string(),
+                )),
+            ],
+        );
+        assert_eq!(ev.notations.len(), 3);
+        let ev = ev.apply_single_notations();
+        assert_eq!(ev.notations.len(), 1);
+        assert_eq!(
+            ev.notations[0],
+            NotationType::Note(NoteNotations::Voice(1))
+        );
+    }
 }

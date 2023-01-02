@@ -1,10 +1,11 @@
 use std::ops::{Add, Sub};
 
 use fraction::Fraction;
-use rea_rs::TimeSignature;
-use reaper_medium::PositionInQuarterNotes;
+use rea_rs::{Position, Reaper, TimeSignature};
 
-use super::{limit_denominator, LIMIT_DENOMINATOR};
+use crate::lilypond_render::RendersToLilypond;
+
+use super::{limit_denominator, normalize_fraction, LIMIT_DENOMINATOR};
 
 #[derive(Debug, PartialOrd, Clone)]
 pub struct Length {
@@ -40,10 +41,12 @@ impl From<&TimeSignature> for Length {
         }
     }
 }
-impl From<PositionInQuarterNotes> for Length {
-    fn from(value: PositionInQuarterNotes) -> Self {
+impl From<Position> for Length {
+    fn from(value: Position) -> Self {
         Self {
-            fraction: Fraction::from(value.get() / 4.0),
+            fraction: Fraction::from(
+                value.as_quarters(&Reaper::get().current_project()) / 4.0,
+            ),
         }
     }
 }
@@ -70,21 +73,38 @@ impl Sub for Length {
     }
     type Output = Self;
 }
+impl RendersToLilypond for Length {
+    fn render_lilypond(&self) -> String {
+        match self.get().numer().unwrap() {
+            1_u64 => format!(
+                "{}",
+                self.get().denom().expect("No Denominator in Length")
+            ),
+            3_u64 => match *self.get().denom().expect("No Denominator in Length"){
+                    x if x >1=>format!("{}.",x/2),
+                    _ => "\\breve.".to_string()
+                },
+            _ => panic!("Invalid Length to render: {:?}. What happens if normalize it? : {:?}", self, normalize_fraction(self.get(), Vec::new().into())),
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
     use fraction::Fraction;
-    use reaper_medium::PositionInQuarterNotes;
 
     use crate::primitives::Length;
 
     #[test]
     fn length() {
         let a = Length::from(1.0);
-        let b = Length::from(PositionInQuarterNotes::new(4.0));
+        let b = Length::from(Fraction::from(1.0));
         assert_eq!(a, b);
         assert_eq!(a.clone() + b.clone(), Length::from(2.0));
-        assert_eq!(Length::from(1.0 / 129.0).get(), Fraction::new(1u64, 128u64));
+        assert_eq!(
+            Length::from(1.0 / 129.0).get(),
+            Fraction::new(1u64, 128u64)
+        );
         assert_eq!(Length::from(1.0 / 129.0), Length::from(1.0 / 128.0));
     }
     #[test]

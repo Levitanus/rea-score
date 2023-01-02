@@ -7,9 +7,8 @@ version = "0.0.1"
 
 [dependencies]
 rea-rs = {workspace = true}
-reaper-low = {workspace = true}
-reaper-macros = {workspace = true}
-reaper-medium = {workspace = true}
+rea-rs-low = {workspace = true}
+rea-rs-macros = {workspace = true}
 
 musical-note = {workspace = true}
 
@@ -17,7 +16,14 @@ env_logger = {workspace = true}
 log = {workspace = true}
 
 fraction = {workspace = true}
+itertools = {workspace = true}
+open = "3.2.0"
+serde = {version = "1", features = ["derive"]}
 thiserror = {workspace = true}
+
+# native:
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tracing-subscriber = "0.3"
 
 [dev-dependencies]
 once_cell = "1.16"

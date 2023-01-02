@@ -1,5 +1,17 @@
 //! A smallest piece of music, that is held by Measure.
-use super::{Length, Pitch, RelativePosition};
+use std::collections::VecDeque;
+
+use crate::{
+    lilypond_render::{RenderSettings, RendersToLilypond},
+    notation::{
+        chord_notations::ChordNotations, note_notations::NoteNotations,
+        NotationError, NotationRender, NotationType,
+    },
+};
+
+use super::{
+    normalize_fraction, Length, Pitch, RelativePosition, ResolvedPitch,
+};
 
 /// Can be considered as "Generic" Event.
 ///
@@ -10,6 +22,13 @@ pub struct EventInfo {
     pub position: RelativePosition,
     pub length: Length,
     pub event: EventType,
+}
+impl RendersToLilypond for EventInfo {
+    fn render_lilypond(&self) -> String {
+        let settings = Self::global_render_settings();
+        let length = self.length.render_lilypond();
+        self.event.render_lilypond(length, &settings)
+    }
 }
 impl EventInfo {
     pub fn new(
@@ -51,7 +70,7 @@ impl EventInfo {
                 > pos.get_position()
     }
 
-    /// Find if overlaps other event (e.g. if end of self > end of other)
+    /// Find if outlasts other event (e.g. if end of self > end of other)
     ///
     /// # Returns
     /// - None if ends are equal or other is longer, or if events are from
@@ -79,12 +98,12 @@ impl EventInfo {
     ///     Length::from(eight),
     ///     Default::default()
     /// );
-    /// assert_eq!(ev1.overlaps(&ev2), None);
-    /// assert_eq!(ev2.overlaps(&ev1), Some(Length::from(eight)));
-    /// assert_eq!(ev3.overlaps(&ev1), None);
-    /// assert_eq!(ev1.overlaps(&ev3), None);
+    /// assert_eq!(ev1.outlasts(&ev2), None);
+    /// assert_eq!(ev2.outlasts(&ev1), Some(Length::from(eight)));
+    /// assert_eq!(ev3.outlasts(&ev1), None);
+    /// assert_eq!(ev1.outlasts(&ev3), None);
     /// ```
-    pub fn overlaps(&self, other: &Self) -> Option<Length> {
+    pub fn outlasts(&self, other: &Self) -> Option<Length> {
         if self.position.get_measure_index()
             != other.position.get_measure_index()
         {
@@ -96,6 +115,58 @@ impl EventInfo {
             return None;
         }
         Some(Length::from(s_end - o_end))
+    }
+
+    /// Find if overlaps other event (e.g. if one part of self == one part of
+    /// other)
+    ///
+    /// # Note
+    ///
+    /// Works only in bounds of measure.
+    ///
+    /// # Example
+    /// ```
+    /// # use rea_score::primitives::{EventInfo, RelativePosition, Length, EventType};
+    /// # use fraction::Fraction;
+    /// let quarter = Fraction::new(1u64, 4u64);
+    /// let eight = Fraction::new(1u64, 8u64);
+    /// let ev1 = EventInfo::new(
+    ///     RelativePosition::new(3, quarter+eight),
+    ///     Length::from(eight),
+    ///     Default::default()
+    /// );
+    /// let ev2 = EventInfo::new(
+    ///     RelativePosition::new(3, quarter),
+    ///     Length::from(quarter+eight),
+    ///     Default::default()
+    /// );
+    /// let ev3 = EventInfo::new(
+    ///     RelativePosition::new(3, eight),
+    ///     Length::from(eight),
+    ///     Default::default()
+    /// );
+    /// assert_eq!(ev1.overlaps(&ev2), true);
+    /// assert_eq!(ev2.overlaps(&ev1), true);
+    /// assert_eq!(ev3.overlaps(&ev1), false);
+    /// assert_eq!(ev1.overlaps(&ev3), false);
+    /// ```
+    pub fn overlaps(&self, other: &Self) -> bool {
+        if self.position.get_measure_index()
+            != other.position.get_measure_index()
+        {
+            return false;
+        }
+        let o_end = other.position.get_position() + other.length.get();
+        let s_end = self.position.get_position() + self.length.get();
+        let o_start = other.position.get_position();
+        let s_start = self.position.get_position();
+        if o_end == s_end || o_start == s_start {
+            return true;
+        }
+        match s_start < o_start {
+            true => s_end >= o_start,
+            false => o_end >= s_start,
+        }
     }
 
     /// Split event, truncate length and return new "head" event,
@@ -179,6 +250,43 @@ impl EventInfo {
         self.cut_head(Length::from(head_length))
     }
 
+    /// Get events, split by normalized length.
+    pub fn with_normalized_length(&self) -> VecDeque<Self> {
+        let lengths = normalize_fraction(self.length.get(), VecDeque::new());
+        let len = lengths.len();
+        let mut pos = self.position.clone();
+        let mut events = VecDeque::new();
+        if len == 1 {
+            events.push_back(EventInfo::new(
+                pos,
+                self.length.clone(),
+                self.event.clone(),
+            ));
+            return events;
+        }
+        let mut event = self.event.clone();
+        for (idx, length) in lengths.into_iter().rev().enumerate() {
+            let ev = match idx {
+                x if x == (len - 1) => event.clone(),
+                _ => {
+                    let t = event.split();
+                    let ev = t.0;
+                    event = t.1;
+                    ev
+                } /* _ => {
+                   *     let t = event.split();
+                   *     event = t.0;
+                   *     let ev = t.1;
+                   *     ev
+                   * } */
+            };
+            let ev = EventInfo::new(pos.clone(), Length::from(length), ev);
+            events.push_back(ev);
+            pos.set_position(pos.get_position() + length);
+        }
+        events
+    }
+
     pub fn set_length(&mut self, length: Length) -> &mut Self {
         self.length = length;
         self
@@ -196,11 +304,17 @@ impl EventInfo {
         pos.set_position(pos.get_position() + self.length.get());
         pos
     }
+    pub fn push_notation(
+        &mut self,
+        notation: NotationType,
+    ) -> Result<(), NotationError> {
+        self.event.push_notation(notation)
+    }
 }
 
 /// Various types of events with concrete realizations
 /// as variant args.
-#[derive(Debug, PartialEq, PartialOrd, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum EventType {
     /// I think, nothing in the crate likes Rest, so...
     /// Don't pass it ever to anywhere.
@@ -225,6 +339,35 @@ impl EventType {
         let b = self;
         (a, b)
     }
+    pub fn push_notation(
+        &mut self,
+        notation: NotationType,
+    ) -> Result<(), NotationError> {
+        match self {
+            Self::Note(note) => note.apply_notation(notation),
+            Self::Chord(chord) => match notation {
+                NotationType::Chord(n) => chord.apply_notation(n),
+                n => Err(NotationError::UnexpectedNotation {
+                    notation: format!("{:?}", n),
+                    object: format!("{:?}", chord),
+                }),
+            },
+            Self::Rest => todo!(),
+        }
+    }
+    pub fn render_lilypond(
+        &self,
+        length_string: String,
+        settings: &RenderSettings,
+    ) -> String {
+        match self {
+            Self::Rest => format!("r{}", length_string),
+            Self::Note(note) => note.render_lilypond(length_string, settings),
+            Self::Chord(chord) => {
+                chord.render_lilypond(length_string, settings)
+            }
+        }
+    }
 }
 impl Default for EventType {
     fn default() -> Self {
@@ -232,39 +375,130 @@ impl Default for EventType {
     }
 }
 
-#[derive(Debug, PartialEq, PartialOrd, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Note {
     pub pitch: Pitch,
     tie: bool,
+    notations: Vec<NoteNotations>,
+    chord_notations: Vec<ChordNotations>,
 }
 impl Note {
     pub fn new(pitch: Pitch) -> Self {
-        Self { pitch, tie: false }
+        Self {
+            pitch,
+            tie: false,
+            notations: Vec::new(),
+            chord_notations: Vec::new(),
+        }
     }
     pub fn set_tie(&mut self, tie: bool) {
         self.tie = tie;
     }
+    fn notation_error(&self, notation: NotationType) -> NotationError {
+        NotationError::UnexpectedNotation {
+            notation: format!("{:?}", notation),
+            object: format!("{:?}", self),
+        }
+    }
+    pub fn apply_notation(
+        &mut self,
+        notation: NotationType,
+    ) -> Result<(), NotationError> {
+        match notation {
+            NotationType::Note(n) => match n {
+                NoteNotations::NoteHead(head) => {
+                    self.notations.push(NoteNotations::NoteHead(head));
+                    Ok(())
+                }
+                NoteNotations::Voice(_) => Err(self.notation_error(notation)),
+            },
+            NotationType::Chord(n) => {
+                self.chord_notations.push(n);
+                Ok(())
+            }
+            NotationType::Event => Err(self.notation_error(notation)),
+        }
+    }
+    pub fn render_lilypond(
+        &self,
+        length_string: String,
+        settings: &RenderSettings,
+    ) -> String {
+        let key = settings.key;
+        let pitch = match self.pitch.resolve(&key) {
+            ResolvedPitch::Name(s) => s,
+            ResolvedPitch::Note(note) => {
+                let n = note.note.to_string();
+                let acc = note.accidental.to_string_by_note(note.note);
+                let acc = match acc.as_str() {
+                    "white" => "",
+                    x => x.clone(),
+                };
+                let oct = match note.octave.raw() as i32 - 4 {
+                    0 => "".to_string(),
+                    x if x > 0 => "'".repeat(x as usize),
+                    x => ",".repeat(x.abs() as usize),
+                };
+                format!("{}{}{}", n, acc, oct)
+            }
+        };
+        let pitch = format!("{pitch}{length_string}");
+        let s = self.notations.iter().fold(pitch, |p, n| n.render(p));
+        let s = self.chord_notations.iter().fold(s, |p, n| n.render(p));
+        let s = match self.tie {
+            true => format!("{}~", s),
+            false => s,
+        };
+
+        s
+    }
+}
+impl PartialOrd for Note {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        match self.pitch.partial_cmp(&other.pitch) {
+            Some(core::cmp::Ordering::Equal) => {}
+            ord => return ord,
+        }
+        self.tie.partial_cmp(&other.tie)
+    }
 }
 
 /// TODO: think on sorting events.
-#[derive(Debug, PartialEq, PartialOrd, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Chord {
     notes: Vec<Note>,
+    chord_notations: Vec<ChordNotations>,
 }
 impl Chord {
     pub fn new() -> Self {
-        Self { notes: Vec::new() }
+        Self {
+            notes: Vec::new(),
+            chord_notations: Vec::new(),
+        }
+    }
+    fn grab_chord_notations(&mut self, notations: &mut Vec<ChordNotations>) {
+        notations
+            .iter_mut()
+            .map(|n| {
+                if !self.chord_notations.contains(&n) {
+                    self.chord_notations.push(n.clone())
+                }
+            })
+            .count();
+        notations.clear();
     }
     pub fn push(mut self, event: EventType) -> Result<Self, String> {
         match event {
             EventType::Rest => {
                 Err(format!("Cannot push rest to chord! {:?}", event))
             }
-            EventType::Note(note) => {
+            EventType::Note(mut note) => {
+                self.grab_chord_notations(&mut note.chord_notations);
                 self.notes.push(note);
                 Ok(self)
             }
             EventType::Chord(mut chord) => {
+                self.grab_chord_notations(&mut chord.chord_notations);
                 self.notes.append(&mut chord.notes);
                 Ok(self)
             }
@@ -272,5 +506,31 @@ impl Chord {
     }
     pub fn set_ties(&mut self, tie: bool) {
         self.notes.iter_mut().map(|n| n.set_tie(tie)).count();
+    }
+    pub fn apply_notation(
+        &mut self,
+        notation: ChordNotations,
+    ) -> Result<(), NotationError> {
+        match notation {
+            ChordNotations::Dynamics(n) => {
+                self.chord_notations.push(ChordNotations::Dynamics(n));
+                Ok(())
+            }
+        }
+    }
+
+    pub fn render_lilypond(
+        &self,
+        length_string: String,
+        settings: &RenderSettings,
+    ) -> String {
+        let note_string = self
+            .notes
+            .iter()
+            .map(|n| n.render_lilypond("".to_string(), settings))
+            .collect::<Vec<_>>();
+        let s = format!("< {} >{length_string}", note_string.join(" "));
+        let s = self.chord_notations.iter().fold(s, |p, n| n.render(p));
+        s
     }
 }

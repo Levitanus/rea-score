@@ -1,15 +1,17 @@
 use std::{error::Error, str::FromStr};
 
-use super::{get_token, reascore_tokens, NotationError};
+use super::{get_token, reascore_tokens, NotationError, NotationRender};
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum NoteNotations {
     NoteHead(NoteHead),
+    Voice(u8),
 }
 impl ToString for NoteNotations {
     fn to_string(&self) -> String {
         match self {
             Self::NoteHead(head) => format!("note-head:{}", head.to_string()),
+            Self::Voice(idx) => format!("voice:{}", idx.to_string()),
         }
     }
 }
@@ -23,13 +25,31 @@ impl FromStr for NoteNotations {
                 let head = get_token(&tokens, 1)?;
                 Ok(Self::NoteHead(head.parse()?))
             }
+            "voice" => {
+                let idx = get_token(&tokens, 1)?;
+                Ok(Self::NoteHead(idx.parse()?))
+            }
             x => Err(NotationError::UnexpectedToken(x.to_string()).into()),
         }
     }
 }
-
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+impl NotationRender for NoteNotations {
+    fn render(&self, pitch_string: impl Into<String>) -> String {
+        match self {
+            Self::NoteHead(head) => {
+                format!(
+                    "\\override NoteHead.style = #'{} {}",
+                    head.to_string(),
+                    pitch_string.into()
+                )
+            }
+            Self::Voice(_) => unimplemented!("Voice can not be rendered!"),
+        }
+    }
+}
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Default)]
 pub enum NoteHead {
+    #[default]
     Default,
     AltDefault,
     Baroque,

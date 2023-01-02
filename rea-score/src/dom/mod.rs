@@ -1,12 +1,19 @@
-use std::{collections::HashMap, sync::Arc};
+use crate::{
+    lilypond_render::RendersToLilypond,
+    primitives::{EventInfo, Measure, TimeMap},
+};
+use itertools::Itertools;
+use rea_rs::{errors::ReaperError, Immutable, Position, Track};
+use std::{collections::HashMap, error::Error, sync::Arc};
 
-use crate::primitives::{EventInfo, Measure, TimeMap};
+use self::midi_parse::{parse_events, ParsedEvent};
 
 pub mod midi_parse;
 
 #[derive(Debug)]
 pub struct Voice {
     pub time_map: Arc<TimeMap>,
+    pub index: u8,
     pub measures: HashMap<u32, Measure>,
 }
 impl Voice {
@@ -19,10 +26,7 @@ impl Voice {
             .insert(event)?;
         match head {
             None => Ok(()),
-            Some(head) => {
-                println!("got head: {:?}", head);
-                self.insert_event(head)
-            }
+            Some(head) => self.insert_event(head),
         }
     }
 }
@@ -32,8 +36,196 @@ impl From<Arc<TimeMap>> for Voice {
         for (idx, measure) in time_map.get().iter() {
             measures.insert(*idx, Measure::from(measure));
         }
-        Self { time_map, measures }
+        Self {
+            time_map,
+            measures,
+            index: 0,
+        }
     }
+}
+impl RendersToLilypond for Voice {
+    fn render_lilypond(&self) -> String {
+        self.measures
+            .iter()
+            .sorted_by(|(idx1, _), (idx2, _)| Ord::cmp(idx1, idx2))
+            .map(|(idx, measure)| {
+                let ts = match idx {
+                    1 => measure.get_time_signature().render_lilypond(),
+                    x => match self.measures.get(&(x - 1)) {
+                        None => measure.get_time_signature().render_lilypond(),
+                        Some(m) => match m.get_time_signature()
+                            == measure.get_time_signature()
+                        {
+                            true => "".to_string(),
+                            false => {
+                                measure.get_time_signature().render_lilypond()
+                            }
+                        },
+                    },
+                };
+                let events = measure
+                    .get_events_normalized()
+                    .expect("Can not get normalized events")
+                    .iter()
+                    .map(|ev| ev.render_lilypond())
+                    .join(" ");
+                format! {
+                    "% bar{idx}\n{ts} {events} |",
+                }
+            })
+            .join(" ")
+    }
+}
+
+#[derive(Debug)]
+pub struct Staff {
+    pub time_map: Arc<TimeMap>,
+    pub index: u8,
+    pub voices: Vec<Voice>,
+}
+impl Staff {
+    pub fn new(time_map: Arc<TimeMap>, index: u8, voices: Vec<Voice>) -> Self {
+        Self {
+            time_map,
+            index,
+            voices,
+        }
+    }
+}
+impl RendersToLilypond for Staff {
+    fn render_lilypond(&self) -> String {
+        if self.voices.len() == 1 {
+            self.voices[0].render_lilypond()
+        } else {
+            todo!()
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct Part {
+    pub time_map: Arc<TimeMap>,
+    pub staves: Vec<Staff>,
+}
+impl Part {
+    pub fn new(time_map: Arc<TimeMap>, staves: Vec<Staff>) -> Self {
+        Self { time_map, staves }
+    }
+}
+impl RendersToLilypond for Part {
+    fn render_lilypond(&self) -> String {
+        if self.staves.len() == 1 {
+            return self.staves[0].render_lilypond();
+        }
+        format!(
+            "<< {} >>",
+            self.staves
+                .iter()
+                .map(|staff| staff.render_lilypond())
+                .join(" ")
+        )
+    }
+}
+
+pub fn parse_track_in_bounds(
+    track: Track<Immutable>,
+    start_pos: impl Into<Position>,
+    end_pos: impl Into<Position>,
+) -> Result<Part, Box<dyn Error>> {
+    let (start_pos, end_pos) = (start_pos.into(), end_pos.into());
+    let events = get_track_midi_in_bounds(track, start_pos, end_pos)?
+        .into_iter()
+        .map(|ev| ev.apply_single_notations());
+    // println!("events: {:?}", events.clone().collect_vec());
+    let time_map = Arc::new(TimeMap::build_from_bounds(start_pos, end_pos));
+    let voices = voices_from_events(events, time_map.clone())?;
+    // println!("voices: {:?}", voices);
+    let staves = staves_from_voices(voices, time_map.clone());
+    // println!("staves: {:?}", staves);
+    Ok(Part::new(time_map.clone(), staves))
+}
+fn staves_from_voices(
+    voices: Vec<Voice>,
+    time_map: Arc<TimeMap>,
+) -> Vec<Staff> {
+    let st: HashMap<u8, Staff> =
+        voices.into_iter().fold(HashMap::new(), |mut map, voice| {
+            let st_idx = match voice.index {
+                1..=4 => 1,
+                5..=8 => 2,
+                9..=12 => 3,
+                13..=16 => 4,
+                _ => panic!("Can not place voice with index {}", voice.index),
+            };
+            match map.get_mut(&st_idx) {
+                None => {
+                    map.insert(
+                        st_idx,
+                        Staff::new(time_map.clone(), st_idx, vec![voice]),
+                    );
+                }
+                Some(staff) => staff.voices.push(voice),
+            };
+            map
+        });
+    st.into_iter()
+        .sorted_by(|(a, _), (b, _)| Ord::cmp(&b, &a))
+        .map(|(_, v)| v)
+        .collect()
+}
+
+fn voices_from_events(
+    events: impl Iterator<Item = ParsedEvent>,
+    time_map: Arc<TimeMap>,
+) -> Result<Vec<Voice>, String> {
+    let voices: Result<HashMap<u8, Voice>, String> =
+        events.fold(Ok(HashMap::new()), |voices, ev| {
+            let idx = ev.channel;
+            let mut voices = voices?;
+            match voices.get_mut(&idx) {
+                None => {
+                    let mut v = Voice::from(time_map.clone());
+                    v.index = idx;
+                    voices.insert(idx, v);
+                    voices.get_mut(&idx).unwrap().insert_event(ev.event)?
+                }
+                Some(vc) => vc.insert_event(ev.event)?,
+            }
+            Ok(voices)
+        });
+    let voices = match voices {
+        Ok(v) => v,
+        Err(err) => return Err(err),
+    };
+    Ok(voices
+        .into_iter()
+        .sorted_by(|(a, _), (b, _)| Ord::cmp(&b, &a))
+        .map(|(_, v)| v)
+        .collect())
+}
+fn get_track_midi_in_bounds(
+    track: Track<Immutable>,
+    start_pos: impl Into<Position>,
+    end_pos: impl Into<Position>,
+) -> Result<Vec<ParsedEvent>, ReaperError> {
+    let start_pos = start_pos.into();
+    let end_pos = end_pos.into();
+    let n_items = track.n_items();
+    let mut events = Vec::new();
+    for idx in 0..n_items {
+        let item = track.get_item(idx).expect("Should be item here");
+        if !(item.position() <= end_pos && item.end_position() >= start_pos) {
+            continue;
+        }
+        let take = item.active_take();
+        let evts = take.iter_midi(None)?.filter(|ev| {
+            let pos = Position::from_ppq(ev.ppq_position(), &take);
+            pos >= start_pos && pos <= end_pos
+        });
+
+        events.extend(parse_events(evts, &take)?);
+    }
+    Ok(events)
 }
 
 #[cfg(test)]

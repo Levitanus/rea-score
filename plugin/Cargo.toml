@@ -8,14 +8,16 @@ version = "0.0.1"
 
 [dependencies]
 rea-rs = {workspace = true}
-reaper-low = {workspace = true}
-reaper-macros = {workspace = true}
-reaper-medium = {workspace = true}
+rea-rs-low = {workspace = true}
+rea-rs-macros = {workspace = true}
+reaper-imgui = {workspace = true}
 
 musical-note = {workspace = true}
 
 env_logger = {workspace = true}
 log = {workspace = true}
+
+serde = {workspace = true}
 
 fraction = {workspace = true}
 thiserror = {workspace = true}

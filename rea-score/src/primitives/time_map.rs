@@ -1,7 +1,7 @@
 //! Main "ruler" for making voices and moving through score.
 use std::collections::HashMap;
 
-use rea_rs::TimeSignature;
+use rea_rs::{Position, Reaper, TimeSignature};
 
 use super::{
     position::{AbsolutePosition, RelativePosition},
@@ -108,6 +108,31 @@ impl TimeMap {
     }
     pub fn get(&self) -> &HashMap<u32, MeasureInfo> {
         &self.measures
+    }
+
+    pub fn build_from_bounds(
+        start_pos: impl Into<Position>,
+        end_pos: impl Into<Position>,
+    ) -> Self {
+        let (start_pos, end_pos) = (start_pos.into(), end_pos.into());
+        let project = Reaper::get().current_project();
+        let start_measure =
+            rea_rs::Measure::from_position(start_pos, &project);
+        let mut end_measure =
+            rea_rs::Measure::from_position(end_pos, &project);
+        if end_pos != end_measure.start {
+            end_measure.index += 1;
+        }
+        let start = AbsolutePosition::from(start_measure.start);
+        let measures = HashMap::from_iter(
+            (start_measure.index..(end_measure.index)).into_iter().map(
+                |idx| {
+                    let measure = rea_rs::Measure::from_index(idx, &project);
+                    (idx, MeasureInfo::new(idx, measure.time_signature))
+                },
+            ),
+        );
+        Self::new(measures, start)
     }
 }
 

@@ -30,10 +30,10 @@ impl Pitch {
     pub fn midi(&self) -> u8 {
         self.note.midi()
     }
-    pub fn resolve(&self, key: Key) -> ResolvedPitch {
+    pub fn resolve(&self, key: &Key) -> ResolvedPitch {
         match &self.note_name {
             Some(name) => ResolvedPitch::Name(name.to_string()),
-            None => ResolvedPitch::Note(self.note.resolve(key)),
+            None => ResolvedPitch::Note(self.note.resolve(key.clone())),
         }
     }
 }

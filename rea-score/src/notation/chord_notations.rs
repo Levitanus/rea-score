@@ -1,6 +1,6 @@
 use std::{error::Error, str::FromStr};
 
-use super::{get_token, reascore_tokens, NotationError};
+use super::{get_token, reascore_tokens, NotationError, NotationRender};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum ChordNotations {
@@ -24,6 +24,13 @@ impl FromStr for ChordNotations {
                 Ok(Self::Dynamics(expr.to_string()))
             }
             x => Err(NotationError::UnexpectedToken(x.to_string()).into()),
+        }
+    }
+}
+impl NotationRender for ChordNotations {
+    fn render(&self, pitch_string: impl Into<String>) -> String {
+        match self {
+            Self::Dynamics(d) => format!("{}\\{}", pitch_string.into(), d),
         }
     }
 }

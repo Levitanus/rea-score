@@ -36,7 +36,7 @@ pub fn data() -> Vec<MidiEvent<RawMidiMessage>> {
                 note: 60,
                 tokens: vec![
                     "text".to_string(),
-                    r"ReaScore|note-head:cross|dyn:\mf".to_string(),
+                    r"ReaScore|note-head:cross|dyn:mf".to_string(),
                 ],
             })),
         ),
@@ -64,7 +64,7 @@ pub fn data() -> Vec<MidiEvent<RawMidiMessage>> {
                 note: 63,
                 tokens: vec![
                     "text".to_string(),
-                    r"ReaScore|note-head:cross|dyn:\f".to_string(),
+                    r"ReaScore|note-head:cross|dyn:f".to_string(),
                 ],
             })),
         ),
@@ -112,8 +112,6 @@ pub fn expected() -> Vec<ParsedEvent> {
 
     vec![
         ParsedEvent::new(
-            positions[0].clone(),
-            lengths[0].clone(),
             1,
             notes[0].pitch.midi(),
             EventInfo::new(
@@ -124,13 +122,11 @@ pub fn expected() -> Vec<ParsedEvent> {
             vec![
                 NotationType::Note(NoteNotations::NoteHead(NoteHead::Cross)),
                 NotationType::Chord(ChordNotations::Dynamics(
-                    r"\mf".to_string(),
+                    "mf".to_string(),
                 )),
             ],
         ),
         ParsedEvent::new(
-            positions[1].clone(),
-            lengths[1].clone(),
             1,
             notes[1].pitch.midi(),
             EventInfo::new(
@@ -141,8 +137,6 @@ pub fn expected() -> Vec<ParsedEvent> {
             Vec::new(),
         ),
         ParsedEvent::new(
-            positions[2].clone(),
-            lengths[2].clone(),
             1,
             notes[2].pitch.midi(),
             EventInfo::new(
@@ -152,10 +146,50 @@ pub fn expected() -> Vec<ParsedEvent> {
             ),
             vec![
                 NotationType::Note(NoteNotations::NoteHead(NoteHead::Cross)),
-                NotationType::Chord(ChordNotations::Dynamics(
-                    r"\f".to_string(),
-                )),
+                NotationType::Chord(ChordNotations::Dynamics("f".to_string())),
             ],
         ),
     ]
+}
+
+//
+
+pub fn regress1_data() -> Vec<MidiEvent<RawMidiMessage>> {
+    let cc_sh = rea_rs::CcShapeKind::Square;
+
+    vec![
+        rea_rs::MidiEvent::new(
+            960 * 3,
+            false,
+            false,
+            cc_sh,
+            RawMidiMessage::from_msg(NoteOnMessage::new(1, 60, 43)),
+        ),
+        rea_rs::MidiEvent::new(
+            960 * 4,
+            false,
+            false,
+            cc_sh,
+            RawMidiMessage::from_msg(NoteOffMessage::new(1, 60, 43)),
+        ),
+    ]
+}
+
+pub fn regress1_expected() -> Vec<ParsedEvent> {
+    let quarter = Fraction::new(1u64, 4u64);
+    let notes = [Note::new(Pitch::from_midi(60, None, None))];
+    let positions = [RelativePosition::new(1, Fraction::new(3u64, 4u64))];
+    let lengths = [Length::from(quarter)];
+
+    let events = vec![ParsedEvent::new(
+        1,
+        notes[0].pitch.midi(),
+        EventInfo::new(
+            positions[0].clone(),
+            lengths[0].clone(),
+            EventType::Note(notes[0].clone()),
+        ),
+        Vec::new(),
+    )];
+    events
 }

@@ -63,6 +63,89 @@ impl Measure {
         &self.events
     }
 
+    /// Get events, split and tied based on the time signature.
+    pub fn get_events_normalized(&self) -> Result<Vec<EventInfo>, String> {
+        let mut ts_events = Vec::new();
+        (0..self.time_signature.numerator)
+            .map(|idx| {
+                let g = Fraction::new(
+                    idx as u64,
+                    self.time_signature.denominator as u64,
+                );
+                let position = RelativePosition::new(self.index, g);
+                let length = Length::from(Fraction::new(
+                    1_u64,
+                    self.time_signature.denominator as u64,
+                ));
+                ts_events.push(EventInfo::new(
+                    position,
+                    length,
+                    Default::default(),
+                ))
+            })
+            .count();
+        let mut events = Vec::new();
+        for event in self.get_events() {
+            let mut event = event.clone();
+            for ts_event in ts_events.iter() {
+                if !ts_event.overlaps(&event) {
+                    continue;
+                }
+                match event.position == ts_event.position {
+                    false => match event.outlasts(&ts_event) {
+                        None => {
+                            events.extend(event.with_normalized_length());
+                            break;
+                        }
+                        Some(length) => match event.position
+                            > ts_event.position
+                        {
+                            false => continue,
+                            true => {
+                                let head = event.cut_head(length)?;
+                                events.extend(event.with_normalized_length());
+                                event = head;
+                            }
+                        },
+                    },
+                    true => {
+                        let ev_end =
+                            event.position.get_position() + event.length.get();
+                        let ts_ev_end = ts_event.position.get_position()
+                            + ts_event.length.get();
+                        match ev_end == ts_ev_end {
+                            true => {
+                                events.extend(event.with_normalized_length());
+                                break;
+                            }
+                            false => match event.outlasts(ts_event) {
+                                None => {
+                                    events.extend(
+                                        event.with_normalized_length(),
+                                    );
+                                    break;
+                                }
+                                Some(_length) => {
+                                    // println!(
+                                    //     "Event:\n----{:?}\noutlasts
+                                    // ts:\n----{:?}",
+                                    //     event, ts_event
+                                    // );
+                                    // let head = event.cut_head(length)?;
+                                    // events
+                                    //     .extend(head.
+                                    // with_normalized_length())
+                                    continue;
+                                }
+                            },
+                        }
+                    }
+                }
+            }
+        }
+        Ok(events)
+    }
+
     /// insert event to the measure, resolving how to place it
     /// with other events.
     ///
@@ -254,13 +337,13 @@ impl Measure {
     ) -> Result<(EventInfo, Option<EventInfo>), String> {
         let mut append_to_self: Option<EventInfo> = None;
         let current = &mut self.events[idx];
-        match event.overlaps(&current) {
+        match event.outlasts(&current) {
             Some(len) => {
                 let head = event.cut_head(len)?;
                 append_to_self = Some(head);
             }
             None => {
-                if let Some(len) = current.overlaps(&event) {
+                if let Some(len) = current.outlasts(&event) {
                     let head = current.cut_head(len)?;
                     // idx += 1;
                     // self.events.push_back(head);

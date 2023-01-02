@@ -2,23 +2,23 @@
 members = ["rea-score", "test", "plugin"]
 
 [workspace.dependencies]
-rea-rs = {git = "https://github.com/Levitanus/rea-rs"}
-# rea-rs = {path = "../rea-rs-workspace/rea-rs"}
-reaper-low = "0.1.0"
-reaper-macros = "0.1.0"
-reaper-medium = "0.1.0"
+# rea-rs = {git = "https://github.com/Levitanus/rea-rs"}
+rea-rs = {version = "0.1.3", path = "../rea-rs-workspace/rea-rs"}
+rea-rs-low = {version = "0.1.3", path = "../rea-rs-workspace/low"}
+rea-rs-macros = "0.1.2"
+rea-rs-test = {version = "0.1.3", path = "../rea-rs-workspace/rea-rs-test"}
+reaper-imgui = {version = "0.1.3", path = "../reaper-imgui/reaper-imgui"}
 
 derivative = "2.2"
 env_logger = "0.10"
 fraction = "0.12"
+itertools = "0.10"
 log = "0.4"
+serde = {version = "1.0", features = ["derive"]}
+
+tempfile = "3.0"
 
 custom_error = "1.9"
 thiserror = "1.0"
 
-musical-note = "0.1"
-
-[patch.crates-io]
-reaper-low = {git = "https://github.com/Levitanus/reaper-rs", branch = "stable_for_rea-rs"}
-reaper-macros = {git = "https://github.com/Levitanus/reaper-rs", branch = "stable_for_rea-rs"}
-reaper-medium = {git = "https://github.com/Levitanus/reaper-rs", branch = "stable_for_rea-rs"}
+musical-note = {version = "0.1", path = "../musical-note"}
