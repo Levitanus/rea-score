@@ -5,21 +5,21 @@ use std::{
     thread,
 };
 
-use rea_rs::{ExtState, PluginContext, Position, Reaper, Timer};
-use rea_score::{
-    lilypond_render::{preview_string, RendersToLilypond},
-    primitives::RelativePosition,
-};
+use rea_rs::{ExtState, Measure, PluginContext, Position, Reaper, Timer};
+use rea_score::lilypond_render::{preview_string, RendersToLilypond};
 use reaper_imgui::{
     Context, ContextFlags, Dock, ImGui, ImageHandle, SetWidth, Size,
 };
 use serde::{Deserialize, Serialize};
+
+use crate::error_box;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct State {
     code: String,
     dpi: u32,
     dock: Dock,
+    preview_bars_amount: u32,
 }
 
 pub struct PreviewWindow {
@@ -45,12 +45,13 @@ impl PreviewWindow {
             code: String::from("c'"),
             dpi: 80,
             dock: Dock::Reaper(3),
+            preview_bars_amount: 4,
         };
         let state = ExtState::new(
             "ReaScore",
             "preview window",
             state,
-            true,
+            false,
             Reaper::get(),
         );
         let next_dock =
@@ -86,7 +87,8 @@ impl PreviewWindow {
         });
     }
     fn check_item(&mut self) {
-        let pr = Reaper::get().current_project();
+        let rpr = Reaper::get();
+        let pr = rpr.current_project();
         let track = match pr.get_selected_track(0) {
             Some(tr) => tr,
             None => return,
@@ -99,24 +101,19 @@ impl PreviewWindow {
             return;
         }
         self.hash = hash;
-        let start_pos: Position = RelativePosition::new(1, 0.0.into()).into();
-        let end_pos = Position::new(pr.length());
+        let (start_pos, end_pos) = match self.preview_bounds(rpr, &pr) {
+            Ok(value) => value,
+            Err(value) => return value,
+        };
         let code =
             rea_score::dom::parse_track_in_bounds(track, start_pos, end_pos);
-        // println!("----CODE AS DOM: ---\n{:#?}", code);
         let code = match code {
             Ok(c) => c,
             Err(err) => {
-                Reaper::get()
-                    .show_message_box(
-                        "Error while rendering preview!",
-                        format!(
-                            "Error occurred, while preview rendered:\n{err}"
-                        ),
-                        rea_rs::MessageBoxType::Ok,
-                    )
-                    .expect("Error while displaying error");
-                return;
+                return error_box(
+                    "Error while rendering preview!",
+                    err.to_string(),
+                )
             }
         };
         let mut state =
@@ -126,6 +123,55 @@ impl PreviewWindow {
         state.code = code;
         self.state.set(state);
         self.render = true;
+    }
+
+    fn preview_bounds(
+        &mut self,
+        rpr: &Reaper,
+        pr: &rea_rs::Project,
+    ) -> Result<(Position, Position), ()> {
+        let cursor_pos: Position = match rpr.active_midi_editor() {
+            Some(e) => match e.item(pr).active_take().iter_midi(None) {
+                Ok(mid) => match mid
+                    .filter_note_on()
+                    .filter(|ev| ev.selected())
+                    .next()
+                {
+                    Some(ev) => Position::from_ppq(
+                        ev.ppq_position(),
+                        &e.item(pr).active_take(),
+                    ),
+                    None => pr.get_cursor_position(),
+                },
+                Err(err) => {
+                    return Err(error_box(
+                        "Error while rendering preview!",
+                        err.to_string(),
+                    ))
+                }
+            },
+            None => pr.get_cursor_position(),
+        };
+        let bars = self.state().preview_bars_amount;
+        let mut start_idx = Measure::from_position(cursor_pos, pr).index;
+        if start_idx > bars / 2 {
+            start_idx -= bars / 2;
+        }
+        if start_idx < 1 {
+            start_idx = 1;
+        }
+        let end_idx = start_idx + bars - 1;
+        let start_pos = Measure::from_index(start_idx, pr).start;
+        let mut end_pos = Measure::from_index(end_idx, pr).end;
+        println!(
+            "start measure: {:#?}\nend measure: {:#?}",
+            Measure::from_index(start_idx, pr),
+            Measure::from_index(end_idx, pr)
+        );
+        if Position::new(pr.length()) < end_pos {
+            end_pos = Position::new(pr.length());
+        }
+        Ok((start_pos, end_pos))
     }
 }
 impl Timer for PreviewWindow {
@@ -157,6 +203,21 @@ impl Timer for PreviewWindow {
                     .dock_widget("dock", &mut state.dock)
                     .set_width(80)
                     .next_dock();
+
+                ctx.sameline(200, None);
+
+                ctx.int_input(
+                    "preview bars",
+                    state.preview_bars_amount as i32,
+                )
+                .set_width(80)
+                .changed(|bars| {
+                    state.preview_bars_amount = bars as u32;
+                    self.render = true;
+                });
+
+                // ctx.sameline(360, None);
+
                 let reload = match &self.reload {
                     None => false,
                     Some(v) => match v.try_recv() {

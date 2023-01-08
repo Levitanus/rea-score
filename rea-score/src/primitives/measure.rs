@@ -236,7 +236,6 @@ impl Measure {
         &mut self,
         event: EventInfo,
     ) -> Result<Option<EventInfo>, String> {
-        // let mut event = event;
         let mut idx = self
             .events
             .iter()

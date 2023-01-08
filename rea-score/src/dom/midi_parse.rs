@@ -1,15 +1,18 @@
 use rea_rs::{
-    errors::ReaperError, MidiEvent, MidiMessage, Position, ProbablyMutable,
-    RawMidiMessage, Take,
+    errors::ReaperError, MidiEvent, MidiMessage, NotationMessage,
+    NoteOnMessage, Position, ProbablyMutable, RawMidiMessage, Take,
 };
 
 use crate::{
-    notation::{notations_from_midi, NotationType},
+    dom::get_edited_midi,
+    notation::{message::MidiFuncs, NotationType},
     primitives::{
         position::Distance, AbsolutePosition, EventInfo, EventType, Note,
         Pitch, RelativePosition,
     },
 };
+
+use super::set_edited_midi;
 
 pub fn parse_events<'a, T: ProbablyMutable>(
     events: impl Iterator<Item = MidiEvent<RawMidiMessage>> + Clone + 'a,
@@ -59,12 +62,150 @@ pub fn parse_events<'a, T: ProbablyMutable>(
             note.note,
             ev,
             not_n
-                .filter_map(|n| notations_from_midi(n.message().clone()))
+                .filter_map(|n| {
+                    MidiFuncs::parse_notations(n.message().clone())
+                })
                 .flatten()
                 .collect(),
         )
     });
     Ok(Box::new(parsed_events))
+}
+
+/// Apply notations to the given note_on events.
+///
+/// Assuming, that caller at first filtered note events, that should be
+/// processed. Than calling this function, which builds `Vec` of new events.
+/// Then, pushing new events to take\whatever.
+pub fn notations_to_note_events(
+    notations: Vec<NotationType>,
+    note_events: Vec<MidiEvent<NoteOnMessage>>,
+    all_events: impl IntoIterator<Item = MidiEvent<RawMidiMessage>>,
+) -> Vec<MidiEvent<RawMidiMessage>> {
+    let mut n_evts = Vec::new();
+
+    // move existing notations from eventlist to `n_evts`
+    let mut all_events: Vec<_> = all_events
+        .into_iter()
+        .filter_map(|ev| {
+            for note in note_events.iter() {
+                if ev.ppq_position() == note.ppq_position() {
+                    if let Some(msg) =
+                        NotationMessage::from_raw(ev.message().get_raw())
+                    {
+                        match msg.notation() {
+                            rea_rs::Notation::Note {
+                                note: nt,
+                                channel: ch,
+                                tokens: _tk,
+                            } => {
+                                if nt != note.message().note()
+                                    || ch != note.message().channel()
+                                {
+                                    continue;
+                                }
+                                // The only case, when event is filtered
+                                // NotationMessages are already processed by
+                                // new notations.
+                                n_evts.push(MidiEvent::with_new_message(
+                                    ev,
+                                    MidiFuncs::replace_notations(
+                                        msg.clone(),
+                                        notations.clone(),
+                                    )
+                                    .expect(
+                                        "Can not aplly notations to message",
+                                    ),
+                                ));
+                                return None;
+                            }
+                            _ => continue,
+                        }
+                    }
+                }
+            }
+            Some(ev)
+        })
+        .collect();
+
+    // building notations events for every desired note.
+    // If notations event exists for note — it is just moved from old vec.
+    let n_evts = note_events
+        .into_iter()
+        .map(|ev| {
+            for (idx, n_ev) in n_evts.iter().enumerate() {
+                if n_ev.ppq_position() != ev.ppq_position() {
+                    continue;
+                }
+                match n_ev.message().notation() {
+                    rea_rs::Notation::Note {
+                        channel,
+                        note,
+                        tokens: _,
+                    } => {
+                        if note != ev.message().note()
+                            || channel != ev.message().channel()
+                        {
+                            continue;
+                        }
+                        let n_ev = n_ev.clone();
+                        n_evts.swap_remove(idx);
+                        return n_ev;
+                    }
+                    _ => continue,
+                }
+            }
+            let msg = NotationMessage::from(rea_rs::Notation::Note {
+                channel: ev.message().channel(),
+                note: ev.message().note(),
+                tokens: Vec::new(),
+            });
+            MidiEvent::with_new_message(
+                ev,
+                MidiFuncs::replace_notations(msg, notations.clone())
+                    .expect("Can not build notation message"),
+            )
+        })
+        // convert notations events to raw events
+        .map(|ev| {
+            let msg = ev.message().as_raw_message();
+            MidiEvent::with_new_message(ev, msg)
+        });
+    // add new notation events to all events
+    all_events.extend(n_evts);
+    // and sort everything by position, and, notes go first, then notations.
+    all_events.sort_by(|a, b| match a.ppq_position().cmp(&b.ppq_position()) {
+        std::cmp::Ordering::Equal => {
+            match NoteOnMessage::from_raw(a.message().get_raw()) {
+                Some(_) => std::cmp::Ordering::Less,
+                None => std::cmp::Ordering::Greater,
+            }
+        }
+        x => x,
+    });
+
+    all_events
+}
+
+pub fn notations_to_first_selected(
+    notations: Vec<NotationType>,
+) -> Result<(), ReaperError> {
+    let events = get_edited_midi()?;
+    let note_events = match events
+        .clone()
+        .filter_note_on()
+        .filter(|ev| ev.selected())
+        .next()
+    {
+        None => {
+            return Err(ReaperError::UnsuccessfulOperation(
+                "No selected notes.",
+            ))
+        }
+        Some(ev) => vec![ev],
+    };
+    let events = notations_to_note_events(notations, note_events, events);
+    set_edited_midi(events)
 }
 
 #[derive(Debug, PartialEq, Clone)]

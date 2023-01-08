@@ -3,7 +3,11 @@ use crate::{
     primitives::{EventInfo, Measure, TimeMap},
 };
 use itertools::Itertools;
-use rea_rs::{errors::ReaperError, Immutable, Position, Track};
+use rea_rs::{
+    errors::ReaperError, Immutable, MidiEvent, MidiEventBuilder,
+    MidiEventConsumer, MidiMessage, NoteOffMessage, Position, RawMidiMessage,
+    Reaper, Track,
+};
 use std::{collections::HashMap, error::Error, sync::Arc};
 
 use self::midi_parse::{parse_events, ParsedEvent};
@@ -22,7 +26,10 @@ impl Voice {
         let head = self
             .measures
             .get_mut(&index)
-            .ok_or(format!("Can not find measure {}", index))?
+            .ok_or(format!(
+                "Can not find measure {}\nrequired by event: {:#?}",
+                index, event
+            ))?
             .insert(event)?;
         match head {
             None => Ok(()),
@@ -226,6 +233,51 @@ fn get_track_midi_in_bounds(
         events.extend(parse_events(evts, &take)?);
     }
     Ok(events)
+}
+
+pub fn get_edited_midi() -> Result<MidiEventBuilder, ReaperError> {
+    let rpr = Reaper::get();
+    let mut pr = rpr.current_project();
+    match rpr.active_midi_editor() {
+        Some(mut e) => e.item_mut(&pr).active_take().iter_midi(None),
+        None => pr
+            .get_selected_item_mut(0)
+            .ok_or(ReaperError::InvalidObject(
+                "No opened editor and no selected item found.",
+            ))?
+            .active_take()
+            .iter_midi(None),
+    }
+}
+
+pub fn set_edited_midi(
+    events: Vec<MidiEvent<RawMidiMessage>>,
+) -> Result<(), ReaperError> {
+    let rpr = Reaper::get();
+    let mut pr = rpr.current_project();
+    match rpr.active_midi_editor() {
+        Some(mut e) => {
+            let mut item = e.item_mut(&pr);
+            let mut take = item.active_take_mut();
+            take.set_midi(
+                MidiEventConsumer::new(events.into_iter()).collect(),
+            )?;
+            take.sort_midi();
+        }
+        None => {
+            let mut item = pr.get_selected_item_mut(0).ok_or(
+                ReaperError::InvalidObject(
+                    "No opened editor and no selected item found.",
+                ),
+            )?;
+            let mut take = item.active_take_mut();
+            take.set_midi(
+                MidiEventConsumer::new(events.into_iter()).collect(),
+            )?;
+            take.sort_midi();
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

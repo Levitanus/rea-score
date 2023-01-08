@@ -1,6 +1,9 @@
 use std::{error::Error, str::FromStr};
 
-use super::{get_token, reascore_tokens, NotationError, NotationRender};
+use super::{
+    get_token, reascore_tokens, NotationError, NotationRender,
+    NotationSplitPosition, TOKENS_DELIMITER,
+};
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum NoteNotations {
@@ -10,8 +13,12 @@ pub enum NoteNotations {
 impl ToString for NoteNotations {
     fn to_string(&self) -> String {
         match self {
-            Self::NoteHead(head) => format!("note-head:{}", head.to_string()),
-            Self::Voice(idx) => format!("voice:{}", idx.to_string()),
+            Self::NoteHead(head) => {
+                format!("note-head{TOKENS_DELIMITER}{}", head.to_string())
+            }
+            Self::Voice(idx) => {
+                format!("voice{TOKENS_DELIMITER}{}", idx.to_string())
+            }
         }
     }
 }
@@ -47,6 +54,21 @@ impl NotationRender for NoteNotations {
         }
     }
 }
+impl NotationSplitPosition for NoteNotations {
+    fn is_head(&self) -> bool {
+        match self {
+            Self::NoteHead(_) => true,
+            Self::Voice(_) => true,
+        }
+    }
+    fn is_tail(&self) -> bool {
+        match self {
+            Self::NoteHead(_) => true,
+            Self::Voice(_) => true,
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Default)]
 pub enum NoteHead {
     #[default]

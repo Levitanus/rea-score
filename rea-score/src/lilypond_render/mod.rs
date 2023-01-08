@@ -2,7 +2,6 @@ use musical_note::Key;
 use rea_rs::{ExtState, Reaper, TimeSignature};
 use serde::{Deserialize, Serialize};
 use std::{
-    fs::File,
     io::Write,
     path::PathBuf,
     process::{Command, Stdio},
@@ -81,9 +80,9 @@ pub fn preview_string(
         "###
     );
     let path = path.into();
-    let input_path = path.with_extension("ly");
-    let mut input_file = File::create(input_path.clone())?;
-    input_file.write_all(string.as_bytes())?;
+    // let input_path = path.with_extension("ly");
+    // let mut input_file = File::create(input_path.clone())?;
+    // input_file.write_all(string.as_bytes())?;
     let output_path = path.with_extension("");
     let mut lily = {
         Command::new("lilypond")

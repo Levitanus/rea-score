@@ -1,6 +1,9 @@
 use std::{error::Error, str::FromStr};
 
-use super::{get_token, reascore_tokens, NotationError, NotationRender};
+use super::{
+    get_token, reascore_tokens, NotationError, NotationRender,
+    NotationSplitPosition, TOKENS_DELIMITER,
+};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum ChordNotations {
@@ -9,7 +12,7 @@ pub enum ChordNotations {
 impl ToString for ChordNotations {
     fn to_string(&self) -> String {
         match self {
-            Self::Dynamics(idx) => format!("dyn:{}", idx),
+            Self::Dynamics(idx) => format!("dyn{TOKENS_DELIMITER}{}", idx),
         }
     }
 }
@@ -31,6 +34,13 @@ impl NotationRender for ChordNotations {
     fn render(&self, pitch_string: impl Into<String>) -> String {
         match self {
             Self::Dynamics(d) => format!("{}\\{}", pitch_string.into(), d),
+        }
+    }
+}
+impl NotationSplitPosition for ChordNotations {
+    fn is_head(&self) -> bool {
+        match self {
+            Self::Dynamics(d) => d != "!",
         }
     }
 }

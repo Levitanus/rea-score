@@ -5,7 +5,7 @@ use crate::{
     lilypond_render::{RenderSettings, RendersToLilypond},
     notation::{
         chord_notations::ChordNotations, note_notations::NoteNotations,
-        NotationError, NotationRender, NotationType,
+        NotationError, NotationRender, NotationSplitPosition, NotationType,
     },
 };
 
@@ -164,8 +164,8 @@ impl EventInfo {
             return true;
         }
         match s_start < o_start {
-            true => s_end >= o_start,
-            false => o_end >= s_start,
+            true => s_end > o_start,
+            false => o_end > s_start,
         }
     }
 
@@ -257,11 +257,7 @@ impl EventInfo {
         let mut pos = self.position.clone();
         let mut events = VecDeque::new();
         if len == 1 {
-            events.push_back(EventInfo::new(
-                pos,
-                self.length.clone(),
-                self.event.clone(),
-            ));
+            events.push_back(self.clone());
             return events;
         }
         let mut event = self.event.clone();
@@ -273,12 +269,7 @@ impl EventInfo {
                     let ev = t.0;
                     event = t.1;
                     ev
-                } /* _ => {
-                   *     let t = event.split();
-                   *     event = t.0;
-                   *     let ev = t.1;
-                   *     ev
-                   * } */
+                }
             };
             let ev = EventInfo::new(pos.clone(), Length::from(length), ev);
             events.push_back(ev);
@@ -328,15 +319,27 @@ impl EventType {
         let a = match self.clone() {
             Self::Note(mut note) => {
                 note.set_tie(true);
+                note.remove_tail_notations();
                 Self::Note(note)
             }
             Self::Chord(mut ch) => {
                 ch.set_ties(true);
+                ch.remove_tail_notations();
                 Self::Chord(ch)
             }
             Self::Rest => Self::Rest,
         };
-        let b = self;
+        let b = match self {
+            Self::Note(mut note) => {
+                note.remove_head_notations();
+                Self::Note(note)
+            }
+            Self::Chord(mut ch) => {
+                ch.remove_head_notations();
+                Self::Chord(ch)
+            }
+            Self::Rest => Self::Rest,
+        };
         (a, b)
     }
     pub fn push_notation(
@@ -418,6 +421,34 @@ impl Note {
             }
             NotationType::Event => Err(self.notation_error(notation)),
         }
+    }
+    pub fn remove_head_notations(&mut self) {
+        self.notations = self
+            .notations
+            .iter()
+            .filter(|nt| !nt.is_head())
+            .map(|nt| nt.clone())
+            .collect();
+        self.chord_notations = self
+            .chord_notations
+            .iter()
+            .filter(|nt| !nt.is_head())
+            .map(|nt| nt.clone())
+            .collect();
+    }
+    pub fn remove_tail_notations(&mut self) {
+        self.notations = self
+            .notations
+            .iter()
+            .filter(|nt| !nt.is_tail())
+            .map(|nt| nt.clone())
+            .collect();
+        self.chord_notations = self
+            .chord_notations
+            .iter()
+            .filter(|nt| !nt.is_tail())
+            .map(|nt| nt.clone())
+            .collect();
     }
     pub fn render_lilypond(
         &self,
@@ -506,6 +537,22 @@ impl Chord {
     }
     pub fn set_ties(&mut self, tie: bool) {
         self.notes.iter_mut().map(|n| n.set_tie(tie)).count();
+    }
+    pub fn remove_head_notations(&mut self) {
+        self.chord_notations = self
+            .chord_notations
+            .iter()
+            .filter(|nt| !nt.is_head())
+            .map(|nt| nt.clone())
+            .collect();
+    }
+    pub fn remove_tail_notations(&mut self) {
+        self.chord_notations = self
+            .chord_notations
+            .iter()
+            .filter(|nt| !nt.is_tail())
+            .map(|nt| nt.clone())
+            .collect();
     }
     pub fn apply_notation(
         &mut self,

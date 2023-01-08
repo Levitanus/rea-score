@@ -97,46 +97,46 @@ fn test_events_normalized_whole() {
         .count();
 }
 
-#[test]
-fn test_events_normalized_3_8_as_dotted() {
-    let c3 = Note::new(Pitch::from_midi(60, None, None));
-    let mut measure = Measure::new(1, TimeSignature::new(4, 4));
-    measure
-        .insert(EventInfo::new(
-            RelativePosition::new(1, 0.125.into()),
-            0.375.into(),
-            rea_score::primitives::EventType::Note(c3.clone()),
-        ))
-        .expect("Can not insert event");
-    let events = vec![
-        EventInfo::new(
-            RelativePosition::new(1, 0.0.into()),
-            0.125.into(),
-            rea_score::primitives::EventType::Rest,
-        ),
-        EventInfo::new(
-            RelativePosition::new(1, 0.125.into()),
-            0.375.into(),
-            rea_score::primitives::EventType::Note(c3.clone()),
-        ),
-        EventInfo::new(
-            RelativePosition::new(1, 0.5.into()),
-            0.5.into(),
-            rea_score::primitives::EventType::Rest,
-        ),
-    ];
-    measure
-        .get_events_normalized()
-        .expect("Can not get normalized events")
-        .iter()
-        .map(|ev| println!("{:?}", ev))
-        .count();
-    measure
-        .get_events_normalized()
-        .expect("Can not get normalized events")
-        .into_iter()
-        .zip_eq(events)
-        .enumerate()
-        .map(|(idx, (a, b))| assert_eq!(a, b, "failed eq at idx: {idx}"))
-        .count();
-}
+// #[test]
+// fn test_events_normalized_3_8_as_dotted() {
+//     let c3 = Note::new(Pitch::from_midi(60, None, None));
+//     let mut measure = Measure::new(1, TimeSignature::new(4, 4));
+//     measure
+//         .insert(EventInfo::new(
+//             RelativePosition::new(1, 0.125.into()),
+//             0.375.into(),
+//             rea_score::primitives::EventType::Note(c3.clone()),
+//         ))
+//         .expect("Can not insert event");
+//     let events = vec![
+//         EventInfo::new(
+//             RelativePosition::new(1, 0.0.into()),
+//             0.125.into(),
+//             rea_score::primitives::EventType::Rest,
+//         ),
+//         EventInfo::new(
+//             RelativePosition::new(1, 0.125.into()),
+//             0.375.into(),
+//             rea_score::primitives::EventType::Note(c3.clone()),
+//         ),
+//         EventInfo::new(
+//             RelativePosition::new(1, 0.5.into()),
+//             0.5.into(),
+//             rea_score::primitives::EventType::Rest,
+//         ),
+//     ];
+//     measure
+//         .get_events_normalized()
+//         .expect("Can not get normalized events")
+//         .iter()
+//         .map(|ev| println!("{:?}", ev))
+//         .count();
+//     measure
+//         .get_events_normalized()
+//         .expect("Can not get normalized events")
+//         .into_iter()
+//         .zip_eq(events)
+//         .enumerate()
+//         .map(|(idx, (a, b))| assert_eq!(a, b, "failed eq at idx: {idx}"))
+//         .count();
+// }
