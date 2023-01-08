@@ -18,14 +18,24 @@ pub mod midi_parse;
 pub struct Voice {
     pub time_map: Arc<TimeMap>,
     pub index: u8,
-    pub measures: HashMap<u32, Measure>,
+    pub begin_measure: u32,
+    measures: Vec<Measure>,
 }
 impl Voice {
-    pub fn insert_event(&mut self, event: EventInfo) -> Result<(), String> {
-        let index = event.position.get_measure_index();
+    pub fn insert_event(
+        &mut self,
+        mut event: EventInfo,
+    ) -> Result<(), String> {
+        let mut index = event.position.get_measure_index();
+        if index < self.begin_measure {
+            eprintln!("Event from previous measures. Probably, tied note.");
+            index = self.begin_measure;
+            event.position.set_measure_index(index);
+            event.position.set_position(0.0.into());
+        }
         let head = self
             .measures
-            .get_mut(&index)
+            .get_mut((index - self.begin_measure) as usize)
             .ok_or(format!(
                 "Can not find measure {}\nrequired by event: {:#?}",
                 index, event
@@ -36,17 +46,25 @@ impl Voice {
             Some(head) => self.insert_event(head),
         }
     }
+    pub fn get_measure(&self, index: u32) -> Option<&Measure> {
+        self.measures.get((index - self.begin_measure) as usize)
+    }
+    pub fn get_measure_mut(&mut self, index: u32) -> Option<&mut Measure> {
+        self.measures.get_mut((index - self.begin_measure) as usize)
+    }
 }
 impl From<Arc<TimeMap>> for Voice {
     fn from(time_map: Arc<TimeMap>) -> Self {
-        let mut measures = HashMap::new();
-        for (idx, measure) in time_map.get().iter() {
-            measures.insert(*idx, Measure::from(measure));
+        let mut measures = Vec::new();
+        for measure in time_map.get().iter() {
+            measures.push(Measure::from(measure));
         }
+        let begin_measure = time_map.begin_measure();
         Self {
             time_map,
-            measures,
             index: 0,
+            begin_measure,
+            measures,
         }
     }
 }
@@ -54,11 +72,15 @@ impl RendersToLilypond for Voice {
     fn render_lilypond(&self) -> String {
         self.measures
             .iter()
-            .sorted_by(|(idx1, _), (idx2, _)| Ord::cmp(idx1, idx2))
-            .map(|(idx, measure)| {
-                let ts = match idx {
-                    1 => measure.get_time_signature().render_lilypond(),
-                    x => match self.measures.get(&(x - 1)) {
+            .map(|measure| {
+                let ts = match measure.get_index() {
+                    x if x == self.begin_measure => {
+                        measure.get_time_signature().render_lilypond()
+                    }
+                    x => match self
+                        .measures
+                        .get((x - self.begin_measure - 1) as usize)
+                    {
                         None => measure.get_time_signature().render_lilypond(),
                         Some(m) => match m.get_time_signature()
                             == measure.get_time_signature()
@@ -76,9 +98,7 @@ impl RendersToLilypond for Voice {
                     .iter()
                     .map(|ev| ev.render_lilypond())
                     .join(" ");
-                format! {
-                    "% bar{idx}\n{ts} {events} |",
-                }
+                format!("% bar{}\n{ts} {events} |", measure.get_index())
             })
             .join(" ")
     }
@@ -227,6 +247,11 @@ fn get_track_midi_in_bounds(
         let take = item.active_take();
         let evts = take.iter_midi(None)?.filter(|ev| {
             let pos = Position::from_ppq(ev.ppq_position(), &take);
+            if pos == start_pos
+                && NoteOffMessage::from_raw(ev.message().get_raw()).is_some()
+            {
+                return false;
+            }
             pos >= start_pos && pos <= end_pos
         });
 
@@ -300,11 +325,11 @@ mod tests {
             None => {
                 let tm = Arc::new(TimeMap::new(
                     TimeMapMeasures::from([
-                        (1, MeasureInfo::new(1, TimeSignature::new(4, 4))),
-                        (2, MeasureInfo::new(2, TimeSignature::new(4, 4))),
-                        (3, MeasureInfo::new(3, TimeSignature::new(4, 4))),
-                        (4, MeasureInfo::new(4, TimeSignature::new(7, 8))),
-                        (5, MeasureInfo::new(5, TimeSignature::new(9, 8))),
+                        MeasureInfo::new(1, TimeSignature::new(4, 4)),
+                        MeasureInfo::new(2, TimeSignature::new(4, 4)),
+                        MeasureInfo::new(3, TimeSignature::new(4, 4)),
+                        MeasureInfo::new(4, TimeSignature::new(7, 8)),
+                        MeasureInfo::new(5, TimeSignature::new(9, 8)),
                     ]),
                     AbsolutePosition::from(0.0),
                 ));
@@ -322,11 +347,11 @@ mod tests {
         // println!("voice:contents before: {:#?}", voice_1);
 
         assert_eq!(
-            voice_1.measures.get(&2).unwrap(),
+            voice_1.get_measure(2).unwrap(),
             &Measure::new(2, TimeSignature::new(4, 4))
         );
         assert_eq!(
-            voice_1.measures.get(&4).unwrap(),
+            voice_1.get_measure(4).unwrap(),
             &Measure::new(4, TimeSignature::new(7, 8))
         );
         let c = EventInfo::new(

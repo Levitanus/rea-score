@@ -1,13 +1,11 @@
 //! Main "ruler" for making voices and moving through score.
-use std::collections::HashMap;
-
 use rea_rs::{Position, Reaper, TimeSignature};
 
 use super::{
     position::{AbsolutePosition, RelativePosition},
     Length,
 };
-pub type TimeMapMeasures = HashMap<u32, MeasureInfo>;
+pub type TimeMapMeasures = Vec<MeasureInfo>;
 
 /// Represents area of timeline, that should be exported.
 ///
@@ -27,21 +25,14 @@ pub struct TimeMap {
 impl TimeMap {
     /// be careful with start position
     pub fn new(
-        measures: HashMap<u32, MeasureInfo>,
+        measures: Vec<MeasureInfo>,
         start_position: AbsolutePosition,
     ) -> Self {
-        let (mut begin, mut end) = (0u32, 0u32);
-        for idx in measures.keys() {
-            if (begin, end) == (0, 0) {
-                (begin, end) = (*idx, *idx);
-            }
-            if idx < &begin {
-                begin = *idx;
-            }
-            if idx > &end {
-                end = *idx;
-            }
-        }
+        let begin = measures
+            .first()
+            .expect("Can not build TimeMap from empty vec")
+            .index;
+        let end = begin + measures.len() as u32 - 1;
         Self {
             measures,
             begin,
@@ -56,8 +47,10 @@ impl TimeMap {
         measure_index: u32,
     ) -> AbsolutePosition {
         let mut counted_abs = self.start_position.clone();
-        for idx in self.begin..measure_index {
-            let measure = &self.measures[&idx];
+        for measure in self.measures.iter() {
+            if measure.index == measure_index {
+                break;
+            }
             counted_abs += measure.length.clone();
         }
         counted_abs
@@ -71,8 +64,7 @@ impl TimeMap {
         absolute: &AbsolutePosition,
     ) -> Option<(MeasureInfo, AbsolutePosition)> {
         let mut counted_abs = self.start_position.clone();
-        for idx in self.begin..self.end + 1 {
-            let measure = &self.measures[&idx];
+        for measure in self.measures.iter() {
             let last_measure_pos = counted_abs.clone();
             counted_abs += measure.length.clone();
             if counted_abs > *absolute {
@@ -104,9 +96,9 @@ impl TimeMap {
         AbsolutePosition::from(m_pos.get() + relative_pos)
     }
     pub fn get_measure_info(&self, measure_index: u32) -> MeasureInfo {
-        self.measures[&measure_index].clone()
+        self.measures[(&measure_index - self.begin) as usize].clone()
     }
-    pub fn get(&self) -> &HashMap<u32, MeasureInfo> {
+    pub fn get(&self) -> &Vec<MeasureInfo> {
         &self.measures
     }
 
@@ -124,15 +116,21 @@ impl TimeMap {
             end_measure.index += 1;
         }
         let start = AbsolutePosition::from(start_measure.start);
-        let measures = HashMap::from_iter(
+        let measures = Vec::from_iter(
             (start_measure.index..(end_measure.index)).into_iter().map(
                 |idx| {
                     let measure = rea_rs::Measure::from_index(idx, &project);
-                    (idx, MeasureInfo::new(idx, measure.time_signature))
+                    MeasureInfo::new(idx, measure.time_signature)
                 },
             ),
         );
         Self::new(measures, start)
+    }
+    pub fn begin_measure(&self) -> u32 {
+        self.begin
+    }
+    pub fn end_measure(&self) -> u32 {
+        self.end
     }
 }
 
@@ -155,8 +153,6 @@ impl MeasureInfo {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-
     use fraction::Fraction;
     use rea_rs::TimeSignature;
 
@@ -167,24 +163,21 @@ mod tests {
 
     use super::{MeasureInfo, TimeMap, TimeMapMeasures};
 
-    fn measures_from_ts(info: HashMap<u32, TimeSignature>) -> TimeMapMeasures {
-        let mut measures = HashMap::new();
+    fn measures_from_ts(info: Vec<(u32, TimeSignature)>) -> TimeMapMeasures {
+        let mut measures = Vec::new();
         for (idx, time_signature) in info {
             let length = Length::from(&time_signature);
-            measures.insert(
-                idx,
-                MeasureInfo {
-                    index: idx,
-                    time_signature,
-                    length,
-                },
-            );
+            measures.push(MeasureInfo {
+                index: idx,
+                time_signature,
+                length,
+            });
         }
         measures
     }
 
     fn time_map_1() -> TimeMap {
-        let info = HashMap::from([
+        let info = Vec::from([
             (1, TimeSignature::new(4, 4)),
             (2, TimeSignature::new(4, 4)),
             (3, TimeSignature::new(4, 4)),
@@ -197,7 +190,7 @@ mod tests {
     }
 
     fn time_map_2() -> TimeMap {
-        let info = HashMap::from([
+        let info = Vec::from([
             (3, TimeSignature::new(4, 4)),
             (4, TimeSignature::new(7, 8)),
             (5, TimeSignature::new(9, 8)),

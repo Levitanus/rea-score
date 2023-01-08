@@ -32,6 +32,7 @@ pub struct PreviewWindow {
     render: bool,
     next_dock: Dock,
     hash: String,
+    cursor_pos: Position,
 }
 impl PreviewWindow {
     pub fn init(context: PluginContext, temp_path: impl Into<PathBuf>) {
@@ -51,7 +52,7 @@ impl PreviewWindow {
             "ReaScore",
             "preview window",
             state,
-            false,
+            true,
             Reaper::get(),
         );
         let next_dock =
@@ -66,6 +67,7 @@ impl PreviewWindow {
             render: true,
             next_dock,
             hash: Default::default(),
+            cursor_pos: Default::default(),
         }));
     }
     fn state(&self) -> State {
@@ -89,6 +91,7 @@ impl PreviewWindow {
     fn check_item(&mut self) {
         let rpr = Reaper::get();
         let pr = rpr.current_project();
+        let cursor_pos = pr.get_cursor_position();
         let track = match pr.get_selected_track(0) {
             Some(tr) => tr,
             None => return,
@@ -97,10 +100,11 @@ impl PreviewWindow {
             Some(hash) => hash,
             None => return,
         };
-        if hash == self.hash {
+        if hash == self.hash && cursor_pos == self.cursor_pos {
             return;
         }
         self.hash = hash;
+        self.cursor_pos = cursor_pos;
         let (start_pos, end_pos) = match self.preview_bounds(rpr, &pr) {
             Ok(value) => value,
             Err(value) => return value,

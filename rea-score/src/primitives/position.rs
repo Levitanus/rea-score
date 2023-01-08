@@ -37,19 +37,17 @@
 //! use rea_score::primitives::{Length, time_map::{TimeMap, MeasureInfo}};
 //! use rea_rs::TimeSignature;
 //!
-//! let measures = HashMap::from([
-//!     (1, MeasureInfo{
+//! let measures = Vec::from([
+//!     MeasureInfo{
 //!             index: 1,
 //!             time_signature: TimeSignature::new(7, 8),
 //!             length: Length::from(7.0/8.0),
-//!         }
-//!     ),
-//!     (2, MeasureInfo{
+//!         },
+//!     MeasureInfo{
 //!             index: 2,
 //!             time_signature: TimeSignature::new(5, 8),
 //!             length: Length::from(5.0/8.0),
-//!         }
-//!     ),
+//!         },
 //! ]);
 //! let time_map = TimeMap::new(measures, 0.0.into());
 //!
