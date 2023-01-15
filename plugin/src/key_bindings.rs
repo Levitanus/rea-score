@@ -2,9 +2,15 @@ use std::collections::HashMap;
 
 use rea_rs::{PluginContext, Reaper, Timer};
 use rea_score::{
-    dom::midi_parse::notations_to_first_selected, notation::NotationType,
+    dom::midi_parse::{
+        notations_to_first_and_last_selected,
+        notations_to_first_selected,
+    },
+    notation::NotationType,
 };
-use reaper_imgui::{Context, ImGui, KeyBinding, KeyCode, KeyModifier};
+use reaper_imgui::{
+    Context, ImGui, KeyBinding, KeyCode, KeyModifier,
+};
 
 pub struct KeyBindings {
     _im_gui: ImGui,
@@ -29,9 +35,10 @@ impl Timer for KeyBindings {
         self.ctx.capture_keyboard(true);
         let mut stop = false;
         if !self.ctx.window("ReaScore keybindings").open(|ctx| {
-            if ctx
-                .got_key_binding(&KeyBinding::new([], KeyCode::Escape), false)
-            {
+            if ctx.got_key_binding(
+                &KeyBinding::new([], KeyCode::Escape),
+                false,
+            ) {
                 println!("got escape: stopping");
                 stop = true;
             }
@@ -61,8 +68,15 @@ impl Timer for KeyBindings {
 fn make_key_bindings() -> HashMap<KeyBinding, Box<dyn Fn()>> {
     let mut kb: HashMap<KeyBinding, Box<dyn Fn()>> = HashMap::new();
     kb.insert(
-        KeyBinding::new([KeyModifier::Ctrl, KeyModifier::Shift], KeyCode::D),
+        KeyBinding::new(
+            [KeyModifier::Ctrl, KeyModifier::Shift],
+            KeyCode::D,
+        ),
         Box::new(apply_dynamics),
+    );
+    kb.insert(
+        KeyBinding::new([KeyModifier::Ctrl], KeyCode::T),
+        Box::new(make_tuplet),
     );
 
     kb
@@ -75,7 +89,10 @@ fn apply_dynamics() {
         vec!["dynamic"],
         None,
     ) {
-        Ok(i) => i.get("dynamic").expect("should be value here").to_string(),
+        Ok(i) => i
+            .get("dynamic")
+            .expect("should be value here")
+            .to_string(),
         Err(_) => return,
     };
     if dyn_str.is_empty() {
@@ -86,6 +103,39 @@ fn apply_dynamics() {
             dyn_str,
         ),
     )]) {
+        Ok(()) => (),
+        Err(err) => {
+            rpr.show_message_box(
+                "Error!",
+                err.to_string(),
+                rea_rs::MessageBoxType::Ok,
+            )
+            .unwrap_or(rea_rs::MessageBoxValue::Ok);
+        }
+    }
+}
+
+fn make_tuplet() {
+    let rpr = Reaper::get();
+    let rate_str = match rpr.get_user_inputs(
+        "Type tuplet rate in form of '3/2' for regular triplet",
+        vec!["rate"],
+        None,
+    ) {
+        Ok(i) => {
+            i.get("rate").expect("should be value here").to_string()
+        }
+        Err(_) => return,
+    };
+    if rate_str.is_empty() {
+        return;
+    }
+    match notations_to_first_and_last_selected(vec![NotationType::Chord(
+        rea_score::notation::chord_notations::ChordNotations::TupletRate(
+            rate_str,
+        ),
+    )],vec![NotationType::Chord(
+        rea_score::notation::chord_notations::ChordNotations::TupletEnd)]) {
         Ok(()) => (),
         Err(err) => {
             rpr.show_message_box(

@@ -73,21 +73,21 @@ impl RendersToLilypond for Voice {
         self.measures
             .iter()
             .map(|measure| {
-                let ts = match measure.get_index() {
+                let ts = match measure.index() {
                     x if x == self.begin_measure => {
-                        measure.get_time_signature().render_lilypond()
+                        measure.time_signature().render_lilypond()
                     }
                     x => match self
                         .measures
                         .get((x - self.begin_measure - 1) as usize)
                     {
-                        None => measure.get_time_signature().render_lilypond(),
-                        Some(m) => match m.get_time_signature()
-                            == measure.get_time_signature()
+                        None => measure.time_signature().render_lilypond(),
+                        Some(m) => match m.time_signature()
+                            == measure.time_signature()
                         {
                             true => "".to_string(),
                             false => {
-                                measure.get_time_signature().render_lilypond()
+                                measure.time_signature().render_lilypond()
                             }
                         },
                     },
@@ -98,7 +98,7 @@ impl RendersToLilypond for Voice {
                     .iter()
                     .map(|ev| ev.render_lilypond())
                     .join(" ");
-                format!("% bar{}\n{ts} {events} |", measure.get_index())
+                format!("% bar{}\n{ts} {events} |", measure.index())
             })
             .join(" ")
     }

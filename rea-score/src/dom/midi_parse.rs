@@ -7,8 +7,8 @@ use crate::{
     dom::get_edited_midi,
     notation::{message::MidiFuncs, NotationType},
     primitives::{
-        position::Distance, AbsolutePosition, EventInfo, EventType, Note,
-        Pitch, RelativePosition,
+        position::Distance, AbsolutePosition, EventInfo, EventType,
+        Note, Pitch, RelativePosition,
     },
 };
 
@@ -17,7 +17,8 @@ use super::set_edited_midi;
 pub fn parse_events<'a, T: ProbablyMutable>(
     events: impl Iterator<Item = MidiEvent<RawMidiMessage>> + Clone + 'a,
     take: &'a Take<T>,
-) -> Result<Box<dyn Iterator<Item = ParsedEvent> + 'a>, ReaperError> {
+) -> Result<Box<dyn Iterator<Item = ParsedEvent> + 'a>, ReaperError>
+{
     let notes = rea_rs::FilterNotes::new(events.clone());
     let notations = events
         .filter_map(|ev| {
@@ -29,12 +30,14 @@ pub fn parse_events<'a, T: ProbablyMutable>(
         })
         .collect::<Vec<_>>();
     let parsed_events = notes.map(move |note| {
-        let position = RelativePosition::from(AbsolutePosition::from(
-            Position::from_ppq(note.start_in_ppq, take),
-        ));
-        let end_pos = RelativePosition::from(AbsolutePosition::from(
-            Position::from_ppq(note.end_in_ppq, take),
-        ));
+        let position =
+            RelativePosition::from(AbsolutePosition::from(
+                Position::from_ppq(note.start_in_ppq, take),
+            ));
+        let end_pos =
+            RelativePosition::from(AbsolutePosition::from(
+                Position::from_ppq(note.end_in_ppq, take),
+            ));
         let length = position.get_distance_as_length(&end_pos, None);
         let ev = EventInfo::new(
             position,
@@ -74,9 +77,9 @@ pub fn parse_events<'a, T: ProbablyMutable>(
 
 /// Apply notations to the given note_on events.
 ///
-/// Assuming, that caller at first filtered note events, that should be
-/// processed. Than calling this function, which builds `Vec` of new events.
-/// Then, pushing new events to take\whatever.
+/// Assuming, that caller at first filtered note events, that should
+/// be processed. Than calling this function, which builds `Vec` of
+/// new events. Then, pushing new events to take\whatever.
 pub fn notations_to_note_events(
     notations: Vec<NotationType>,
     note_events: Vec<MidiEvent<NoteOnMessage>>,
@@ -129,7 +132,8 @@ pub fn notations_to_note_events(
         .collect();
 
     // building notations events for every desired note.
-    // If notations event exists for note — it is just moved from old vec.
+    // If notations event exists for note — it is just moved from old
+    // vec.
     let n_evts = note_events
         .into_iter()
         .map(|ev| {
@@ -155,11 +159,12 @@ pub fn notations_to_note_events(
                     _ => continue,
                 }
             }
-            let msg = NotationMessage::from(rea_rs::Notation::Note {
-                channel: ev.message().channel(),
-                note: ev.message().note(),
-                tokens: Vec::new(),
-            });
+            let msg =
+                NotationMessage::from(rea_rs::Notation::Note {
+                    channel: ev.message().channel(),
+                    note: ev.message().note(),
+                    tokens: Vec::new(),
+                });
             MidiEvent::with_new_message(
                 ev,
                 MidiFuncs::replace_notations(msg, notations.clone())
@@ -173,15 +178,19 @@ pub fn notations_to_note_events(
         });
     // add new notation events to all events
     all_events.extend(n_evts);
-    // and sort everything by position, and, notes go first, then notations.
-    all_events.sort_by(|a, b| match a.ppq_position().cmp(&b.ppq_position()) {
-        std::cmp::Ordering::Equal => {
-            match NoteOnMessage::from_raw(a.message().get_raw()) {
-                Some(_) => std::cmp::Ordering::Less,
-                None => std::cmp::Ordering::Greater,
+    // and sort everything by position, and, notes go first, then
+    // notations.
+    all_events.sort_by(|a, b| {
+        match a.ppq_position().cmp(&b.ppq_position()) {
+            std::cmp::Ordering::Equal => {
+                match NoteOnMessage::from_raw(a.message().get_raw())
+                {
+                    Some(_) => std::cmp::Ordering::Less,
+                    None => std::cmp::Ordering::Greater,
+                }
             }
+            x => x,
         }
-        x => x,
     });
 
     all_events
@@ -204,7 +213,43 @@ pub fn notations_to_first_selected(
         }
         Some(ev) => vec![ev],
     };
-    let events = notations_to_note_events(notations, note_events, events);
+    let events =
+        notations_to_note_events(notations, note_events, events);
+    set_edited_midi(events)
+}
+pub fn notations_to_first_and_last_selected(
+    notations_to_first: Vec<NotationType>,
+    notations_to_last: Vec<NotationType>,
+) -> Result<(), ReaperError> {
+    let events = get_edited_midi()?;
+    let mut note_events =
+        events.clone().filter_note_on().filter(|ev| ev.selected());
+    let first_selected = match note_events.next() {
+        None => {
+            return Err(ReaperError::UnsuccessfulOperation(
+                "No selected notes.",
+            ))
+        }
+        Some(ev) => vec![ev],
+    };
+    let last_selected = match note_events.last() {
+        None => {
+            return Err(ReaperError::UnsuccessfulOperation(
+                "No selected notes.",
+            ))
+        }
+        Some(ev) => vec![ev],
+    };
+    let events = notations_to_note_events(
+        notations_to_first,
+        first_selected,
+        events,
+    );
+    let events = notations_to_note_events(
+        notations_to_last,
+        last_selected,
+        events,
+    );
     set_edited_midi(events)
 }
 
@@ -236,9 +281,11 @@ impl ParsedEvent {
         self.notations = self
             .notations
             .into_iter()
-            .filter_map(|not| match self.event.push_notation(not.clone()) {
-                Ok(_) => None,
-                Err(_) => Some(not),
+            .filter_map(|not| {
+                match self.event.push_notation(not.clone()) {
+                    Ok(_) => None,
+                    Err(_) => Some(not),
+                }
             })
             .collect();
         self
@@ -256,7 +303,8 @@ mod tests {
             NotationType,
         },
         primitives::{
-            EventInfo, EventType, Length, Note, Pitch, RelativePosition,
+            EventInfo, EventType, Length, Note, Pitch,
+            RelativePosition,
         },
     };
 
@@ -271,10 +319,14 @@ mod tests {
             EventInfo::new(
                 RelativePosition::new(1, quarter),
                 Length::from(quarter * 2),
-                EventType::Note(Note::new(Pitch::from_midi(60, None, None))),
+                EventType::Note(Note::new(Pitch::from_midi(
+                    60, None, None,
+                ))),
             ),
             vec![
-                NotationType::Note(NoteNotations::NoteHead(NoteHead::Cross)),
+                NotationType::Note(NoteNotations::NoteHead(
+                    NoteHead::Cross,
+                )),
                 NotationType::Note(NoteNotations::Voice(1)),
                 NotationType::Chord(ChordNotations::Dynamics(
                     r"\f".to_string(),

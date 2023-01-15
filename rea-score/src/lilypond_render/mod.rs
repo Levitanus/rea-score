@@ -15,20 +15,26 @@ impl RenderSettings {
     pub fn new(key: Key) -> Self {
         Self { key }
     }
+    fn default() -> Self {
+        Self {
+            key: Key::from_str("c", musical_note::Scale::Major)
+                .expect("Should be valid key"),
+        }
+    }
 }
 
 pub trait RendersToLilypond {
     fn render_lilypond(&self) -> String;
     fn global_render_settings() -> RenderSettings {
+        if !Reaper::is_available() {
+            return RenderSettings::default();
+        }
         let rpr = Reaper::get();
         let pr = rpr.current_project();
         let settings = ExtState::new(
             "ReaScore",
             "render settings",
-            RenderSettings::new(
-                Key::from_str("c", musical_note::Scale::Major)
-                    .expect("Should be valid key"),
-            ),
+            RenderSettings::default(),
             true,
             &pr,
         );
@@ -89,7 +95,9 @@ pub fn preview_string(
             .stdin(Stdio::piped())
             .arg(format!(
                 "--output={}",
-                output_path.to_str().expect("can not make output file path")
+                output_path
+                    .to_str()
+                    .expect("can not make output file path")
             ))
             // .arg("-dbackend=svg")
             // .arg("-danti-alias-factor=8")
@@ -114,7 +122,8 @@ pub fn preview_string(
             .expect("Failed to write to stdin");
     });
 
-    let output = lily.wait_with_output().expect("Failed to read stdout");
+    let output =
+        lily.wait_with_output().expect("Failed to read stdout");
     let output = String::from_utf8_lossy(&output.stdout);
     if !output.is_empty() {
         eprint!("{output}");
@@ -123,5 +132,6 @@ pub fn preview_string(
 }
 
 pub fn preview_file(path: PathBuf) {
-    open::that(path.with_extension("png")).expect("Can not open path");
+    open::that(path.with_extension("png"))
+        .expect("Can not open path");
 }

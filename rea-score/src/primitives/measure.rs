@@ -20,15 +20,15 @@ use fraction::Fraction;
 use rea_rs::TimeSignature;
 
 use super::{
-    Chord, EventInfo, EventType, Length, MeasureInfo, RelativePosition,
+    container::Container, EventInfo, Length, MeasureInfo,
+    RelativePosition,
 };
 
 #[derive(Debug, PartialEq)]
 pub struct Measure {
     index: u32,
     time_signature: TimeSignature,
-    events: VecDeque<EventInfo>,
-    length: Length,
+    container: Container,
 }
 impl From<&MeasureInfo> for Measure {
     fn from(measure: &MeasureInfo) -> Self {
@@ -38,33 +38,44 @@ impl From<&MeasureInfo> for Measure {
 impl Measure {
     pub fn new(index: u32, time_signature: TimeSignature) -> Self {
         let length = Length::from(&time_signature);
-        let mut events = VecDeque::new();
-        let pos = RelativePosition::new(index, Fraction::from(0.0));
-        events.push_back(EventInfo::new(pos, length.clone(), EventType::Rest));
+        // let mut events = VecDeque::new();
+        let position =
+            RelativePosition::new(index, Fraction::from(0.0));
+        // events.push_back(EventInfo::new(
+        //     position.clone(),
+        //     length.clone(),
+        //     EventType::Rest,
+        // ));
         Self {
             index,
             time_signature,
-            events,
-            length,
+            container: Container::empty(position, length),
         }
     }
 
-    pub fn get_index(&self) -> u32 {
+    pub fn index(&self) -> u32 {
         self.index
     }
-    pub fn get_length(&self) -> &Length {
-        &self.length
+    pub fn length(&self) -> &Length {
+        self.container.length()
     }
-    pub fn get_time_signature(&self) -> &TimeSignature {
+    pub fn events(&self) -> &VecDeque<EventInfo> {
+        self.container.events()
+    }
+    pub fn length_mut(&mut self) -> &mut Length {
+        self.container.length_mut()
+    }
+    pub fn events_mut(&mut self) -> &mut VecDeque<EventInfo> {
+        self.container.events_mut()
+    }
+    pub fn time_signature(&self) -> &TimeSignature {
         &self.time_signature
     }
 
-    pub fn get_events(&self) -> &VecDeque<EventInfo> {
-        &self.events
-    }
-
     /// Get events, split and tied based on the time signature.
-    pub fn get_events_normalized(&self) -> Result<Vec<EventInfo>, String> {
+    pub fn get_events_normalized(
+        &self,
+    ) -> Result<Vec<EventInfo>, String> {
         let mut ts_events = Vec::new();
         (0..self.time_signature.numerator)
             .map(|idx| {
@@ -85,7 +96,7 @@ impl Measure {
             })
             .count();
         let mut events = Vec::new();
-        for event in self.get_events() {
+        for event in self.events() {
             let mut event = event.clone();
             for ts_event in ts_events.iter() {
                 if !ts_event.overlaps(&event) {
@@ -94,7 +105,9 @@ impl Measure {
                 match event.position == ts_event.position {
                     false => match event.outlasts(&ts_event) {
                         None => {
-                            events.extend(event.with_normalized_length());
+                            events.extend(
+                                event.with_normalized_length(),
+                            );
                             break;
                         }
                         Some(length) => match event.position
@@ -103,41 +116,49 @@ impl Measure {
                             false => continue,
                             true => {
                                 let head = event.cut_head(length)?;
-                                events.extend(event.with_normalized_length());
+                                events.extend(
+                                    event.with_normalized_length(),
+                                );
                                 event = head;
                             }
                         },
                     },
                     true => {
-                        let ev_end =
-                            event.position.get_position() + event.length.get();
-                        let ts_ev_end = ts_event.position.get_position()
+                        let ev_end = event.position.position()
+                            + event.length.get();
+                        let ts_ev_end = ts_event.position.position()
                             + ts_event.length.get();
                         match ev_end == ts_ev_end {
                             true => {
-                                events.extend(event.with_normalized_length());
+                                events.extend(
+                                    event.with_normalized_length(),
+                                );
                                 break;
                             }
-                            false => match event.outlasts(ts_event) {
-                                None => {
-                                    events.extend(
+                            false => {
+                                match event.outlasts(ts_event) {
+                                    None => {
+                                        events.extend(
                                         event.with_normalized_length(),
                                     );
-                                    break;
+                                        break;
+                                    }
+                                    Some(_length) => {
+                                        // println!(
+                                        //     "Event:\n----{:?}\
+                                        // noutlasts
+                                        // ts:\n----{:?}",
+                                        //     event, ts_event
+                                        // );
+                                        // let head =
+                                        // event.cut_head(length)?;
+                                        // events
+                                        //     .extend(head.
+                                        // with_normalized_length())
+                                        continue;
+                                    }
                                 }
-                                Some(_length) => {
-                                    // println!(
-                                    //     "Event:\n----{:?}\noutlasts
-                                    // ts:\n----{:?}",
-                                    //     event, ts_event
-                                    // );
-                                    // let head = event.cut_head(length)?;
-                                    // events
-                                    //     .extend(head.
-                                    // with_normalized_length())
-                                    continue;
-                                }
-                            },
+                            }
                         }
                     }
                 }
@@ -151,7 +172,8 @@ impl Measure {
     ///
     /// # Returns
     /// - None, if everything OK
-    /// - Some(EventInfo), if something should be inserted to the next measure.
+    /// - Some(EventInfo), if something should be inserted to the
+    ///   next measure.
     /// - Err(String), if something goes wrong.
     ///
     /// # Example
@@ -213,7 +235,7 @@ impl Measure {
     ///         EventType::Note(c3.clone()),
     ///     ),
     /// ];
-    /// for (res, exp) in m1.get_events().iter().zip(expected_events.iter()) {
+    /// for (res, exp) in m1.events().iter().zip(expected_events.iter()) {
     ///     assert_eq!(res, exp);
     /// }
     ///
@@ -236,125 +258,11 @@ impl Measure {
         &mut self,
         event: EventInfo,
     ) -> Result<Option<EventInfo>, String> {
-        let mut idx = self
-            .events
-            .iter()
-            .position(|evt| evt.contains_pos(&event.position))
-            .ok_or(format!(
-                "Can not find place for event with position: {:?}",
-                event.position
-            ))?;
-        let (event, append_to_self) =
-            self.resolve_event_overlaps(event, idx)?;
-
-        // be sure, length and position of event and current are equal
-        let mut current = &mut self.events[idx];
-        if current.position != event.position {
-            let head = current.cut_head_at_position(&event.position)?;
-            idx += 1;
-            self.events.insert(idx, head);
-            current = &mut self.events[idx];
-        }
-
-        // Now, when current event and event are equal at position and length,
-        // and we are sure, everything else is correctly splitted,
-        // we can replace old event by the new one, which is constructed below.
-        let new_event = match &current.event {
-            EventType::Rest => event.event,
-            EventType::Chord(chord) => {
-                EventType::Chord(chord.clone().push(event.event)?)
-            }
-            EventType::Note(note) => EventType::Chord(
-                Chord::new()
-                    .push(EventType::Note(note.clone()))?
-                    .push(event.event)?,
-            ),
-        };
-        current.set_event(new_event);
-
-        // make sure, nothing is lost:
-        match append_to_self {
-            None => Ok(None),
-            Some(mut head) => {
-                // if head starts in the next measure, return it completely.
-                if head.position.get_position() == self.length.get() {
-                    head.position.set_measure_index(self.index + 1);
-                    head.position.set_position(Fraction::from(0.0));
-                    return Ok(Some(head));
-                }
-                // if head is longer then measure, insert our part recursively,
-                // and return head to the caller, to insert to the next
-                // measure.
-                if head.get_end_position().get_position() > self.length.get() {
-                    let mut current = head;
-                    // head =
-                    //     current.cut_head(Length::from(self.length.get() -
-                    // current.length.get()))?;
-                    let mut head = current.cut_head_at_position(
-                        &RelativePosition::new(self.index, self.length.get()),
-                    )?;
-                    head.position.set_position(Fraction::from(0.0));
-                    head.position.set_measure_index(self.index + 1);
-                    // If still something left — things go bad,
-                    // and it's time to return Err.
-                    match self.insert(current)? {
-                        None => Ok(Some(head)),
-                        Some(unexpected) => Err(format!(
-                            "unexpected head of event found: {:?}",
-                            unexpected
-                        )),
-                    }
-                } else {
-                    // if head is part of our measure — recursively insert it.
-                    match self.insert(head)? {
-                        None => Ok(None),
-                        Some(unexpected) => Err(format!(
-                            "unexpected head of event found: {:?}",
-                            unexpected
-                        )),
-                    }
-                }
-            }
-        }
-    }
-
-    /// cuts head from inserted event, or from the current measure event,
-    /// depends on their overlaps.
-    ///
-    /// # Returns
-    /// (event, head), where:
-    /// - event: EventInfo is given event, but, possibly, truncated.
-    /// - head: Option<EventInfo> is cut part, from given event, or from one,
-    /// being present in measure already.
-    ///
-    /// # Side-effect
-    /// can make event at idx shorter.
-    fn resolve_event_overlaps(
-        &mut self,
-        mut event: EventInfo,
-        idx: usize,
-    ) -> Result<(EventInfo, Option<EventInfo>), String> {
-        let mut append_to_self: Option<EventInfo> = None;
-        let current = &mut self.events[idx];
-        match event.outlasts(&current) {
-            Some(len) => {
-                let head = event.cut_head(len)?;
-                append_to_self = Some(head);
-            }
-            None => {
-                if let Some(len) = current.outlasts(&event) {
-                    let head = current.cut_head(len)?;
-                    // idx += 1;
-                    // self.events.push_back(head);
-                    self.events.insert(idx + 1, head);
-                }
-            }
-        }
-        Ok((event, append_to_self))
+        self.container.insert(event)
     }
 
     pub fn get(&self, pos: &RelativePosition) -> Option<&EventInfo> {
-        for ev in self.events.iter() {
+        for ev in self.events().iter() {
             if ev.contains_pos(pos) {
                 return Some(&ev);
             }

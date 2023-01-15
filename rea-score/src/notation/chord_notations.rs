@@ -8,11 +8,19 @@ use super::{
 #[derive(Debug, PartialEq, Clone)]
 pub enum ChordNotations {
     Dynamics(String),
+    TupletRate(String),
+    TupletEnd,
 }
 impl ToString for ChordNotations {
     fn to_string(&self) -> String {
         match self {
-            Self::Dynamics(idx) => format!("dyn{TOKENS_DELIMITER}{}", idx),
+            Self::Dynamics(idx) => {
+                format!("dyn{TOKENS_DELIMITER}{}", idx)
+            }
+            Self::TupletRate(tpl) => {
+                format!("tuplet{TOKENS_DELIMITER}{}", tpl)
+            }
+            Self::TupletEnd => "tuplet_end".to_string(),
         }
     }
 }
@@ -26,14 +34,30 @@ impl FromStr for ChordNotations {
                 let expr = get_token(&tokens, 1)?;
                 Ok(Self::Dynamics(expr.to_string()))
             }
-            x => Err(NotationError::UnexpectedToken(x.to_string()).into()),
+            "tuplet" => {
+                let expr = get_token(&tokens, 1)?;
+                Ok(Self::TupletRate(expr.to_string()))
+            }
+            "tuplet_end" => Ok(Self::TupletEnd),
+            x => {
+                Err(NotationError::UnexpectedToken(x.to_string())
+                    .into())
+            }
         }
     }
 }
 impl NotationRender for ChordNotations {
     fn render(&self, pitch_string: impl Into<String>) -> String {
         match self {
-            Self::Dynamics(d) => format!("{}\\{}", pitch_string.into(), d),
+            Self::Dynamics(d) => {
+                format!("{}\\{}", pitch_string.into(), d)
+            }
+            Self::TupletRate(_) => {
+                unimplemented!()
+            }
+            Self::TupletEnd => {
+                unimplemented!()
+            }
         }
     }
 }
@@ -41,6 +65,8 @@ impl NotationSplitPosition for ChordNotations {
     fn is_head(&self) -> bool {
         match self {
             Self::Dynamics(d) => d != "!",
+            Self::TupletRate(_) => true,
+            Self::TupletEnd => false,
         }
     }
 }
