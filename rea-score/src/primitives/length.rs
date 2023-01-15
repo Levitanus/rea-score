@@ -5,7 +5,9 @@ use rea_rs::{Position, Reaper, TimeSignature};
 
 use crate::lilypond_render::RendersToLilypond;
 
-use super::{limit_denominator, normalize_fraction, LIMIT_DENOMINATOR};
+use super::{
+    limit_denominator, normalize_fraction, LIMIT_DENOMINATOR,
+};
 
 #[derive(Debug, PartialOrd, Clone)]
 pub struct Length {
@@ -14,6 +16,12 @@ pub struct Length {
 impl Length {
     pub fn get(&self) -> Fraction {
         limit_denominator(self.fraction, LIMIT_DENOMINATOR).unwrap()
+    }
+    pub fn get_unquantized(&self) -> Fraction {
+        self.fraction.clone()
+    }
+    pub fn get_quantized_to(&self, denom: u64) -> Fraction {
+        limit_denominator(self.fraction, denom).unwrap()
     }
 }
 impl PartialEq for Length {
@@ -45,7 +53,8 @@ impl From<Position> for Length {
     fn from(value: Position) -> Self {
         Self {
             fraction: Fraction::from(
-                value.as_quarters(&Reaper::get().current_project()) / 4.0,
+                value.as_quarters(&Reaper::get().current_project())
+                    / 4.0,
             ),
         }
     }
@@ -105,7 +114,10 @@ mod tests {
             Length::from(1.0 / 129.0).get(),
             Fraction::new(1u64, 128u64)
         );
-        assert_eq!(Length::from(1.0 / 129.0), Length::from(1.0 / 128.0));
+        assert_eq!(
+            Length::from(1.0 / 129.0),
+            Length::from(1.0 / 128.0)
+        );
     }
     #[test]
     #[should_panic]

@@ -92,7 +92,7 @@ impl TimeMap {
     ) -> AbsolutePosition {
         let measure_index = relative.get_measure_index();
         let m_pos = self.get_absolute_position_of_measure(measure_index);
-        let relative_pos = relative.get_position();
+        let relative_pos = relative.position();
         AbsolutePosition::from(m_pos.get() + relative_pos)
     }
     pub fn get_measure_info(&self, measure_index: u32) -> MeasureInfo {

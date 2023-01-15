@@ -57,36 +57,55 @@ pub fn limit_denominator(
     frac: Fraction,
     limit: u64,
 ) -> Result<Fraction, String> {
-    if limit < 1 {
-        return Err(format!(
-            "denominator shouldn't be less that one. input:{}",
-            limit
-        ));
-    }
-    let mut diff = Fraction::from(1.0);
-    let int = frac.floor();
-    if int == frac {
-        return Ok(frac);
-    }
-    let mut last = frac;
-    let mut cur: Fraction;
-    let mut i = 0_u64;
-    loop {
-        cur = Fraction::new(i, limit) + int;
-        let cur_diff = (frac - cur).abs();
-        if cur_diff > diff {
-            break;
-        } else {
-            diff = cur_diff;
-        }
-        if i > 1000 {
-            panic!("Probably, infinite loop")
-        }
-        last = cur;
-        i += 1u64;
-    }
-    Ok(last)
+    let (mut num, mut denom) = (
+        *frac
+            .numer()
+            .ok_or("Can not get numerator from fraction".to_string())?
+            as f64,
+        *frac
+            .denom()
+            .ok_or("Can not get denominator from fraction".to_string())?
+            as f64,
+    );
+    let limit_f64 = limit as f64;
+    num *= limit_f64 / denom;
+    denom *= limit_f64 / denom;
+    Ok(Fraction::new(num.round() as u32, denom.round() as u32))
 }
+// pub fn limit_denominator(
+//     frac: Fraction,
+//     limit: u64,
+// ) -> Result<Fraction, String> {
+//     if limit < 1 {
+//         return Err(format!(
+//             "denominator shouldn't be less that one. input:{}",
+//             limit
+//         ));
+//     }
+//     let mut diff = Fraction::from(1.0);
+//     let int = frac.floor();
+//     if int == frac {
+//         return Ok(frac);
+//     }
+//     let mut last = frac;
+//     let mut cur: Fraction;
+//     let mut i = 0_u64;
+//     loop {
+//         cur = Fraction::new(i, limit) + int;
+//         let cur_diff = (frac - cur).abs();
+//         if cur_diff > diff {
+//             break;
+//         } else {
+//             diff = cur_diff;
+//         }
+//         if i > 1000 {
+//             panic!("Probably, infinite loop")
+//         }
+//         last = cur;
+//         i += 1u64;
+//     }
+//     Ok(last)
+// }
 
 fn power_of_two(num: u64) -> Option<u64> {
     if num > 1u64 {
