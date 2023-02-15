@@ -1,5 +1,7 @@
 use std::{error::Error, str::FromStr};
 
+use fraction::Fraction;
+
 use super::{
     get_token, reascore_tokens, NotationError, NotationRender,
     NotationSplitPosition, TOKENS_DELIMITER,
@@ -8,7 +10,7 @@ use super::{
 #[derive(Debug, PartialEq, Clone)]
 pub enum ChordNotations {
     Dynamics(String),
-    TupletRate(String),
+    TupletRate(Fraction),
     TupletEnd,
 }
 impl ToString for ChordNotations {
@@ -18,7 +20,11 @@ impl ToString for ChordNotations {
                 format!("dyn{TOKENS_DELIMITER}{}", idx)
             }
             Self::TupletRate(tpl) => {
-                format!("tuplet{TOKENS_DELIMITER}{}", tpl)
+                format!(
+                    "tuplet{TOKENS_DELIMITER}{}/{}",
+                    tpl.numer().expect("can not get numerator"),
+                    tpl.denom().expect("can not get denominator"),
+                )
             }
             Self::TupletEnd => "tuplet_end".to_string(),
         }
@@ -36,7 +42,7 @@ impl FromStr for ChordNotations {
             }
             "tuplet" => {
                 let expr = get_token(&tokens, 1)?;
-                Ok(Self::TupletRate(expr.to_string()))
+                Ok(Self::TupletRate(Fraction::from_str(expr)?))
             }
             "tuplet_end" => Ok(Self::TupletEnd),
             x => {

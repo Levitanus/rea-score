@@ -2,13 +2,17 @@ use std::collections::VecDeque;
 
 use fraction::Fraction;
 
-use super::{Chord, EventInfo, EventType, Length, RelativePosition};
+use super::{
+    event::EventTupletType, Chord, EventInfo, EventType, Length,
+    RelativePosition,
+};
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Container {
     events: VecDeque<EventInfo>,
     position: RelativePosition,
     length: Length,
+    tuplet: Option<Box<EventInfo>>,
 }
 impl Container {
     fn new(
@@ -20,6 +24,7 @@ impl Container {
             events,
             position,
             length,
+            tuplet: None,
         }
     }
     pub fn empty(
@@ -46,6 +51,27 @@ impl Container {
     pub fn events_mut(&mut self) -> &mut VecDeque<EventInfo> {
         &mut self.events
     }
+    pub fn set_end_position(&mut self, end: RelativePosition) {
+        let mut self_end = self.position.clone();
+        self_end
+            .set_position(self_end.position() + self.length.get());
+        let additional_length =
+            (end.clone() - self_end.clone()).position();
+        let event = self
+            .events_mut()
+            .back_mut()
+            .expect("Can not get last event");
+        match event.event {
+            EventType::Rest => event.set_end_position(end.clone()),
+            _ => self.events_mut().push_back(EventInfo::new(
+                self_end,
+                additional_length.into(),
+                Default::default(),
+            )),
+        }
+        self.length =
+            Length::from(end.position() - self.position.position());
+    }
 
     /// insert event to the container, resolving how to
     /// place it with other events.
@@ -57,15 +83,73 @@ impl Container {
     /// - Err(String), if something goes wrong.
     pub fn insert(
         &mut self,
-        event: EventInfo,
+        mut event: EventInfo,
     ) -> Result<Option<EventInfo>, String> {
+        match &event.event {
+            EventType::Note(note) => println!(
+                "inserting note: {:?} at position: {:?}",
+                note.pitch.midi(),
+                event.position
+            ),
+            _ => (),
+        };
+
+        match event.tuplet_type {
+            EventTupletType::TupletStart(rate) => {
+                event = event.convert_to_tuplet(rate);
+                event.position.set_position(
+                    event.position.position_quantized(),
+                );
+                self.tuplet = Some(Box::new(event));
+                return Ok(None);
+            }
+            EventTupletType::NonTuplet => match &mut self.tuplet {
+                Some(tuplet) => {
+                    match &mut tuplet.event {
+                        EventType::Tuplet(tuplet) => {
+                            tuplet.push(event)?;
+                        }
+                        _ => panic!(
+                            "Tuplet event is not a tuplet: {:?}",
+                            tuplet
+                        ),
+                    }
+                    return Ok(None);
+                }
+                None => (),
+            },
+            EventTupletType::TupletEnd => match &mut self.tuplet {
+                None => eprintln!("Unexpected tuplet end event."),
+                Some(tuplet) => {
+                    event.quantize_end(None);
+                    event.tuplet_type = EventTupletType::NonTuplet;
+                    let end_pos: RelativePosition;
+                    match &mut tuplet.event {
+                        EventType::Tuplet(tuplet) => {
+                            tuplet.push(event)?;
+                            end_pos = tuplet.end_position();
+                        }
+                        _ => panic!(
+                            "Tuplet event is not a tuplet: {:?}",
+                            tuplet
+                        ),
+                    }
+                    event = *self
+                        .tuplet
+                        .take()
+                        .expect("Should be tuplet here");
+                    event.set_end_position(end_pos);
+                    self.tuplet = None;
+                }
+            },
+        }
         let mut idx = self
             .events()
             .iter()
             .position(|evt| evt.contains_pos(&event.position))
             .ok_or(format!(
-                "Can not find place for event with position: {:?}",
-                event.position
+                "Can not find place for event with position: {:?}\n event is: {:#?}\n container is: {:?}",
+                event.position, event, self
             ))?;
         let (event, append_to_self) =
             self.resolve_event_overlaps(event, idx)?;
@@ -96,7 +180,11 @@ impl Container {
                     .push(EventType::Note(note.clone()))?
                     .push(event.event)?,
             ),
-            EventType::Tuplet(_) => todo!(),
+            EventType::Tuplet(tuplet) => {
+                let mut tuplet = tuplet.clone();
+                tuplet.push(event)?;
+                EventType::Tuplet(tuplet)
+            }
         };
         current.set_event(new_event);
 
@@ -106,7 +194,9 @@ impl Container {
             Some(mut head) => {
                 // if head starts in the next measure,
                 // return it completely.
-                if head.position.position() == self.length().get() {
+                if head.position.position_quantized()
+                    == self.length().get_quantized()
+                {
                     head.position.set_measure_index(
                         self.position.get_measure_index() + 1,
                     );
@@ -117,8 +207,8 @@ impl Container {
                 // our part recursively, and
                 // return head to the caller, to insert to
                 // the next measure.
-                if head.get_end_position().position()
-                    > self.length().get()
+                if head.end_position().position_quantized()
+                    > self.length().get_quantized()
                 {
                     let mut current = head;
                     // head =
@@ -129,7 +219,7 @@ impl Container {
                     let mut head = current.cut_head_at_position(
                         &RelativePosition::new(
                             self.position.get_measure_index(),
-                            self.length().get(),
+                            self.length().get_quantized(),
                         ),
                     )?;
                     head.position.set_position(Fraction::from(0.0));
@@ -180,10 +270,18 @@ impl Container {
     ) -> Result<(EventInfo, Option<EventInfo>), String> {
         let mut append_to_self: Option<EventInfo> = None;
         let current = &mut self.events_mut()[idx];
+        println!(
+            "----\ncurrent: {:?}\nappending: {:?}----\n",
+            current, event
+        );
         match event.outlasts(&current) {
             Some(len) => {
-                let head = event.cut_head(len)?;
-                append_to_self = Some(head);
+                if let EventType::Tuplet(_) = event.event {
+                    println!("Didn't cut tuplet, as it should be proceed later");
+                } else {
+                    let head = event.cut_head(len)?;
+                    append_to_self = Some(head);
+                }
             }
             None => {
                 if let Some(len) = current.outlasts(&event) {

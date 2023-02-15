@@ -14,9 +14,18 @@ use crate::{
 };
 
 use super::{
-    container::Container, normalize_fraction, Length, Pitch,
-    RelativePosition, ResolvedPitch,
+    container::Container, limit_denominator, normalize_fraction,
+    Length, Pitch, RelativePosition, ResolvedPitch,
+    LIMIT_DENOMINATOR,
 };
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum EventTupletType {
+    NonTuplet,
+    TupletStart(Fraction),
+    TupletEnd,
+    // Tuplet(Fraction),
+}
 
 /// Can be considered as "Generic" Event.
 ///
@@ -28,6 +37,7 @@ pub struct EventInfo {
     pub position: RelativePosition,
     pub length: Length,
     pub event: EventType,
+    pub tuplet_type: EventTupletType,
 }
 impl RendersToLilypond for EventInfo {
     fn render_lilypond(&self) -> String {
@@ -46,7 +56,39 @@ impl EventInfo {
             position,
             length,
             event,
+            tuplet_type: EventTupletType::NonTuplet,
         };
+    }
+
+    /// Consume event and return EventType with Tuplet, containing
+    /// only one event.
+    ///
+    /// Later events can be pushed to the tuplet ([EventType]) itself
+    /// and it will grow.
+    pub fn convert_to_tuplet(mut self, rate: Fraction) -> Self {
+        match &self.event {
+            EventType::Tuplet(_) => self,
+            _ => {
+                self.tuplet_type = EventTupletType::NonTuplet;
+                let mut event = self.clone();
+                event.event =
+                    EventType::Tuplet(Tuplet::new(rate, vec![self]));
+                event
+            }
+        }
+    }
+
+    /// adjust event length to make event end quantized.
+    ///
+    /// If None is provided — default denominator will be used.
+    pub fn quantize_end(&mut self, denom: impl Into<Option<u64>>) {
+        let end = self.position.position() + self.length.get();
+        let end = limit_denominator(
+            end,
+            denom.into().unwrap_or(LIMIT_DENOMINATOR),
+        )
+        .expect("Can not quantize end");
+        self.length = Length::from(end - self.position.position());
     }
 
     /// True if given position in bounds of event.
@@ -252,7 +294,7 @@ impl EventInfo {
         &mut self,
         position: &RelativePosition,
     ) -> Result<Self, String> {
-        if position < &self.position {
+        if position <= &self.position {
             return Err(format!(
                 "can not cut at negative position. self: {:?}, given: {:?}",
                 self.position, position
@@ -265,12 +307,18 @@ impl EventInfo {
 
     /// Get events, split by normalized length.
     pub fn with_normalized_length(&self) -> VecDeque<Self> {
-        let lengths =
-            normalize_fraction(self.length.get(), VecDeque::new());
+        let lengths = normalize_fraction(
+            self.length.get_quantized(),
+            VecDeque::new(),
+        );
         let len = lengths.len();
         let mut pos = self.position.clone();
         let mut events = VecDeque::new();
         if len == 1 {
+            events.push_back(self.clone());
+            return events;
+        }
+        if let EventType::Tuplet(_) = self.event {
             events.push_back(self.clone());
             return events;
         }
@@ -291,7 +339,7 @@ impl EventInfo {
                 ev,
             );
             events.push_back(ev);
-            pos.set_position(pos.position() + length);
+            pos.set_position(pos.position_quantized() + length);
         }
         events
     }
@@ -311,16 +359,36 @@ impl EventInfo {
         self.event = event;
         self
     }
-    pub fn get_end_position(&self) -> RelativePosition {
+    pub fn end_position(&self) -> RelativePosition {
         let mut pos = self.position.clone();
         pos.set_position(pos.position() + self.length.get());
         pos
+    }
+    pub fn set_end_position(&mut self, end: RelativePosition) {
+        self.length =
+            Length::from(end.position() - self.position.position());
+        // if let EventType::Tuplet(tuplet) = &mut self.event {
+        //     tuplet.set_end_position(end);
+        // }
     }
     pub fn push_notation(
         &mut self,
         notation: NotationType,
     ) -> Result<(), NotationError> {
-        self.event.push_notation(notation)
+        match notation {
+            NotationType::Chord(ChordNotations::TupletRate(
+                rate,
+            )) => {
+                self.tuplet_type =
+                    EventTupletType::TupletStart(rate);
+                Ok(())
+            }
+            NotationType::Chord(ChordNotations::TupletEnd) => {
+                self.tuplet_type = EventTupletType::TupletEnd;
+                Ok(())
+            }
+            notation => self.event.push_notation(notation),
+        }
     }
 }
 
@@ -349,8 +417,8 @@ impl EventType {
                 Self::Chord(ch)
             }
             Self::Rest => Self::Rest,
-            Self::Tuplet(_) => {
-                panic!("Can not split tuplet")
+            Self::Tuplet(t) => {
+                panic!("Can not split tuplet: {:#?}", t)
             }
         };
         let b = match self {
@@ -653,6 +721,7 @@ impl Chord {
 pub struct Tuplet {
     rate: Fraction,
     container: Container,
+    position: RelativePosition,
     length: Length,
 }
 
@@ -661,21 +730,38 @@ impl Tuplet {
         rate: Fraction,
         events: impl IntoIterator<Item = EventInfo>,
     ) -> Self {
-        let events = Self::apply_rate(rate, events);
-        let position =
-            events.front().expect("no first event").position.clone();
+        let (position, events) = Self::apply_rate(rate, events);
         let back = events.back().expect("no last element");
-        let length = back.position.position() + back.length.get()
-            - position.position();
-        let mut container =
-            Container::empty(position, length.clone().into());
+        let length = back.position.position_quantized()
+            + back.length.get_quantized();
+        let mut container = Container::empty(
+            RelativePosition::new(
+                position.get_measure_index(),
+                0.0.into(),
+            ),
+            length.clone().into(),
+        );
+        // panic!("Created tuplet container: {:#?}", container);
         events.into_iter().map(|ev| container.insert(ev)).count();
         Self {
             rate,
             container,
+            position,
             length: length.into(),
         }
     }
+
+    pub fn push(&mut self, event: EventInfo) -> Result<(), String> {
+        self.set_end_position(event.end_position());
+        let event = self.apply_rate_to_event(event);
+        // println!(
+        //     "pushing event to tuplet (normalized): {:#?}\n----
+        // event end position: {:?}",     event,
+        // event.end_position() );
+        self.container.insert(event)?;
+        Ok(())
+    }
+
     pub fn render_lilypond(
         &self,
         _length_string: String,
@@ -688,7 +774,12 @@ impl Tuplet {
             self.container
                 .events()
                 .iter()
-                .map(|ev| ev.render_lilypond())
+                .map(|ev| {
+                    let evts = ev.with_normalized_length();
+                    evts.iter()
+                        .map(|ev1| ev1.render_lilypond())
+                        .join(" ")
+                })
                 .join(" ")
         )
     }
@@ -696,28 +787,96 @@ impl Tuplet {
     fn apply_rate(
         rate: Fraction,
         events: impl IntoIterator<Item = EventInfo>,
-    ) -> VecDeque<EventInfo> {
+    ) -> (RelativePosition, VecDeque<EventInfo>) {
         // println!("apply_rate");
         let mut events = events.into_iter();
         let mut frst = events.next().expect("No first event");
-        let frst_pos = frst.position.position_unquantized();
-        let length = frst.length.get_unquantized();
-        // println!("first length: {:?}, rate: {:?}", length, rate);
-        frst.length = (length * rate).into();
+        let quantize = 256;
+        let container_position = frst.position.clone();
+        let frst_pos = frst.position.position_quantized_to(quantize);
+        let length = frst.length.get_quantized_to(quantize);
+        frst.length =
+            limit_denominator(length * rate, LIMIT_DENOMINATOR)
+                .expect("Can not quantize first tuplet event length")
+                .into();
+        // println!(
+        //     "first length: {:?}, rate: {:?}, normalized: {:?}",
+        //     length, rate, frst.length
+        // );
         frst.position.set_position(0.0.into());
         let mut result = VecDeque::new();
         // println!("--- first: {:#?}", frst);
         result.push_back(frst);
         for mut event in events {
-            let position = event.position.position_unquantized();
-            event
-                .position
-                .set_position((position - frst_pos) * rate);
-            event.length =
-                (event.length.get_unquantized() * rate).into();
+            let position =
+                event.position.position_quantized_to(quantize);
+            let position = limit_denominator(
+                (position - frst_pos) * rate,
+                LIMIT_DENOMINATOR,
+            )
+            .expect("can not quantize new event position");
+            event.position.set_position(position);
+
+            let length = limit_denominator(
+                event.length.get_quantized_to(quantize) * rate,
+                LIMIT_DENOMINATOR,
+            )
+            .expect("Can not quantize new event length");
+            event.length = length.into();
             // println!("--- event: {:#?}", event);
             result.push_back(event);
         }
-        result
+        (container_position, result)
+    }
+
+    fn apply_rate_to_event(
+        &mut self,
+        mut event: EventInfo,
+    ) -> EventInfo {
+        let pos = (event.position.position()
+            - self.position.position())
+            * self.rate;
+        // println!(
+        //     "Normalazing position:\n\
+        //     ---- event position: {:?}\n\
+        //     ---- container position: {:?}\n\
+        //     ---- rate: {:?}\n\
+        //     ---- result position: {:?}",
+        //     event.position.position(),
+        //     self.position.position(),
+        //     self.rate,
+        //     pos
+        // );
+        event.set_length((event.length.get() * self.rate).into());
+        event.set_length(event.length.get_quantized().into());
+        event.position.set_position(pos);
+        event
+            .position
+            .set_position(event.position.position_quantized());
+        event
+    }
+
+    pub fn set_end_position(&mut self, mut end: RelativePosition) {
+        self.length =
+            Length::from(end.position() - self.position.position());
+        let length = Length::from(self.length.get() * self.rate);
+        let legnth = length.get_quantized();
+        end.set_position(legnth);
+        self.container_mut().set_end_position(end)
+    }
+
+    pub fn end_position(&self) -> RelativePosition {
+        let mut position = self.position.clone();
+        position
+            .set_position(position.position() + self.length.get());
+        position
+    }
+
+    pub fn container(&self) -> &Container {
+        &self.container
+    }
+
+    pub fn container_mut(&mut self) -> &mut Container {
+        &mut self.container
     }
 }

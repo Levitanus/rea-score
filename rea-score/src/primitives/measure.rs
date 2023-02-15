@@ -38,14 +38,8 @@ impl From<&MeasureInfo> for Measure {
 impl Measure {
     pub fn new(index: u32, time_signature: TimeSignature) -> Self {
         let length = Length::from(&time_signature);
-        // let mut events = VecDeque::new();
         let position =
             RelativePosition::new(index, Fraction::from(0.0));
-        // events.push_back(EventInfo::new(
-        //     position.clone(),
-        //     length.clone(),
-        //     EventType::Rest,
-        // ));
         Self {
             index,
             time_signature,
@@ -124,10 +118,12 @@ impl Measure {
                         },
                     },
                     true => {
-                        let ev_end = event.position.position()
-                            + event.length.get();
-                        let ts_ev_end = ts_event.position.position()
-                            + ts_event.length.get();
+                        let ev_end =
+                            event.position.position_quantized()
+                                + event.length.get_quantized();
+                        let ts_ev_end =
+                            ts_event.position.position_quantized()
+                                + ts_event.length.get_quantized();
                         match ev_end == ts_ev_end {
                             true => {
                                 events.extend(
@@ -144,17 +140,6 @@ impl Measure {
                                         break;
                                     }
                                     Some(_length) => {
-                                        // println!(
-                                        //     "Event:\n----{:?}\
-                                        // noutlasts
-                                        // ts:\n----{:?}",
-                                        //     event, ts_event
-                                        // );
-                                        // let head =
-                                        // event.cut_head(length)?;
-                                        // events
-                                        //     .extend(head.
-                                        // with_normalized_length())
                                         continue;
                                     }
                                 }

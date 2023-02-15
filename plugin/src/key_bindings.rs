@@ -1,5 +1,6 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, str::FromStr};
 
+use fraction::Fraction;
 use rea_rs::{PluginContext, Reaper, Timer};
 use rea_score::{
     dom::midi_parse::{
@@ -11,6 +12,8 @@ use rea_score::{
 use reaper_imgui::{
     Context, ImGui, KeyBinding, KeyCode, KeyModifier,
 };
+
+use crate::error_box;
 
 pub struct KeyBindings {
     _im_gui: ImGui,
@@ -105,12 +108,7 @@ fn apply_dynamics() {
     )]) {
         Ok(()) => (),
         Err(err) => {
-            rpr.show_message_box(
-                "Error!",
-                err.to_string(),
-                rea_rs::MessageBoxType::Ok,
-            )
-            .unwrap_or(rea_rs::MessageBoxValue::Ok);
+            return error_box("Error!", format!("{}",err));
         }
     }
 }
@@ -130,20 +128,28 @@ fn make_tuplet() {
     if rate_str.is_empty() {
         return;
     }
+    let rate = match Fraction::from_str(rate_str.as_str()) {
+        Ok(rate) => rate,
+        Err(err) => {
+            return error_box(
+                "Wrong rate string",
+                format!(
+                    "please, type the rate string in form of '3/2'\
+                    \n original error: {}",
+                    err
+                ),
+            );
+        }
+    };
     match notations_to_first_and_last_selected(vec![NotationType::Chord(
         rea_score::notation::chord_notations::ChordNotations::TupletRate(
-            rate_str,
+            rate,
         ),
     )],vec![NotationType::Chord(
         rea_score::notation::chord_notations::ChordNotations::TupletEnd)]) {
         Ok(()) => (),
         Err(err) => {
-            rpr.show_message_box(
-                "Error!",
-                err.to_string(),
-                rea_rs::MessageBoxType::Ok,
-            )
-            .unwrap_or(rea_rs::MessageBoxValue::Ok);
+            return error_box("Error!", format!("{}",err));
         }
     }
 }

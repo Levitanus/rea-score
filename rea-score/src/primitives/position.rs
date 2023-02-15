@@ -27,7 +27,8 @@
 //! ```
 //!
 //! Relative calculations are possible with providing of `TimeMap`,
-//! or with accessing of reaper API (which is hard to make from test code).
+//! or with accessing of reaper API (which is hard to make from test
+//! code).
 //!
 //! ```no_run
 //! use std::collections::HashMap;
@@ -85,7 +86,9 @@ use std::ops::{Add, AddAssign, Sub};
 use fraction::Fraction;
 use rea_rs::{Measure, Reaper};
 
-use super::{limit_denominator, time_map::TimeMap, Length, LIMIT_DENOMINATOR};
+use super::{
+    limit_denominator, time_map::TimeMap, Length, LIMIT_DENOMINATOR,
+};
 
 #[derive(Debug, PartialEq, PartialOrd, Clone)]
 pub struct RelativeDistance {
@@ -102,11 +105,11 @@ pub struct RelativeDistance {
 pub trait Distance<T: GenericPosition>: GenericPosition {
     /// Calculates absolute distance between positions.
     ///
-    /// If both positions are `AbsolutePosition` — no TimeMap or reaper
-    /// calls needed.
+    /// If both positions are `AbsolutePosition` — no TimeMap or
+    /// reaper calls needed.
     ///
-    /// If TimeMap is provided — calculates using TimeMap. Otherwise —
-    /// uses reaper API.
+    /// If TimeMap is provided — calculates using TimeMap. Otherwise
+    /// — uses reaper API.
     fn get_distance_as_length(
         &self,
         other: &T,
@@ -122,8 +125,8 @@ pub trait Distance<T: GenericPosition>: GenericPosition {
 
     /// Calculates relative distance between positions.
     ///
-    /// If TimeMap is provided — calculates using TimeMap. Otherwise —
-    /// uses reaper API.
+    /// If TimeMap is provided — calculates using TimeMap. Otherwise
+    /// — uses reaper API.
     fn get_relative_distance(
         &self,
         other: &T,
@@ -131,21 +134,23 @@ pub trait Distance<T: GenericPosition>: GenericPosition {
     ) -> RelativeDistance {
         let mut a = self.get_relative_position(time_map);
         let mut b = other.get_relative_position(time_map);
-        let measures =
-            b.get_measure_index() as i32 - a.get_measure_index() as i32;
+        let measures = b.get_measure_index() as i32
+            - a.get_measure_index() as i32;
         if a > b {
             (a, b) = (b, a);
         }
 
         RelativeDistance {
             measures,
-            before_first_barline: a.get_distance_to_bar_end(time_map),
+            before_first_barline: a
+                .get_distance_to_bar_end(time_map),
             after_last_barline: Length::from(b.position()),
         }
     }
 }
 
-/// Unifies interface of concerting positions from relative to absolute.
+/// Unifies interface of concerting positions from relative to
+/// absolute.
 ///
 /// If no TimeMap provided — uses reaper API.
 pub trait GenericPosition {
@@ -170,10 +175,10 @@ impl AbsolutePosition {
     }
 
     /// By default, quantizes up to 1/128
-    pub fn get(&self) -> Fraction {
+    pub fn get_quantized(&self) -> Fraction {
         limit_denominator(self.position, LIMIT_DENOMINATOR).unwrap()
     }
-    pub fn get_unquantized(&self) -> Fraction {
+    pub fn get(&self) -> Fraction {
         self.position.clone()
     }
     pub fn get_quantized_to(&self, denominator: u64) -> Fraction {
@@ -211,7 +216,7 @@ impl GenericPosition for AbsolutePosition {
 impl Add for AbsolutePosition {
     fn add(self, rhs: Self) -> Self {
         Self {
-            position: self.get_unquantized() + rhs.get_unquantized(),
+            position: self.get() + rhs.get(),
         }
     }
 
@@ -220,7 +225,7 @@ impl Add for AbsolutePosition {
 impl Sub for AbsolutePosition {
     fn sub(self, rhs: Self) -> Self {
         Self {
-            position: self.get_unquantized() - rhs.get_unquantized(),
+            position: self.get() - rhs.get(),
         }
     }
 
@@ -229,7 +234,7 @@ impl Sub for AbsolutePosition {
 impl Add<Length> for AbsolutePosition {
     fn add(self, rhs: Length) -> Self::Output {
         Self {
-            position: self.get_unquantized() + rhs.get_unquantized(),
+            position: self.get() + rhs.get(),
         }
     }
 
@@ -237,14 +242,16 @@ impl Add<Length> for AbsolutePosition {
 }
 impl AddAssign<Length> for AbsolutePosition {
     fn add_assign(&mut self, rhs: Length) {
-        self.position = self.get_unquantized() + rhs.get_unquantized()
+        self.position = self.get() + rhs.get()
     }
 }
 impl From<rea_rs::Position> for AbsolutePosition {
     fn from(position: rea_rs::Position) -> Self {
         Self {
             position: Fraction::from(
-                position.as_quarters(&Reaper::get().current_project()) / 4.0,
+                position
+                    .as_quarters(&Reaper::get().current_project())
+                    / 4.0,
             ),
         }
     }
@@ -272,15 +279,15 @@ impl From<f64> for AbsolutePosition {
 }
 impl Into<f64> for AbsolutePosition {
     fn into(self) -> f64 {
-        let ps = self.get_unquantized();
+        let ps = self.get();
         (*ps.numer().unwrap() as f64) / (*ps.denom().unwrap() as f64)
     }
 }
 
 /// Represents relative position (like in score).
 ///
-/// Can not be used by itself and totally depends on project timeline or
-/// on TimeMap.
+/// Can not be used by itself and totally depends on project timeline
+/// or on TimeMap.
 #[derive(Debug, Eq, PartialEq, PartialOrd, Clone, Hash)]
 pub struct RelativePosition {
     measure_index: u32,
@@ -291,7 +298,10 @@ impl RelativePosition {
     /// # Parameters:
     /// * measure index: measure number (1-based)
     /// * measure_position: distance from start of measure.
-    pub fn new(measure_index: u32, measure_position: Fraction) -> Self {
+    pub fn new(
+        measure_index: u32,
+        measure_position: Fraction,
+    ) -> Self {
         Self {
             measure_index,
             measure_position,
@@ -304,18 +314,23 @@ impl RelativePosition {
         time_map.pos_relative_from_absolute(absolute)
     }
     /// position in measure.
-    pub fn position(&self) -> Fraction {
-        limit_denominator(self.measure_position, LIMIT_DENOMINATOR).unwrap()
+    pub fn position_quantized(&self) -> Fraction {
+        limit_denominator(self.measure_position, LIMIT_DENOMINATOR)
+            .unwrap()
     }
     pub fn set_position(&mut self, position: Fraction) -> &Self {
         self.measure_position = position;
         self
     }
-    pub fn position_unquantized(&self) -> Fraction {
+    pub fn position(&self) -> Fraction {
         self.measure_position.clone()
     }
-    pub fn position_quantized_to(&self, denominator: u32) -> Fraction {
-        limit_denominator(self.measure_position, denominator as u64).unwrap()
+    pub fn position_quantized_to(
+        &self,
+        denominator: u64,
+    ) -> Fraction {
+        limit_denominator(self.measure_position, denominator)
+            .unwrap()
     }
     /// measure (1-based)
     pub fn get_measure_index(&self) -> u32 {
@@ -325,7 +340,8 @@ impl RelativePosition {
         self.measure_index = index;
         self
     }
-    /// for example: with position of 3/8 in 4/4 measure returns Length of 5/8
+    /// for example: with position of 3/8 in 4/4 measure returns
+    /// Length of 5/8
     pub fn get_distance_to_bar_end(
         &self,
         time_map: Option<&TimeMap>,
@@ -335,16 +351,20 @@ impl RelativePosition {
             Some(time_map) => {
                 let measure_info =
                     time_map.get_measure_info(self.measure_index);
-                Length::from(measure_info.length.get_unquantized() - self.position_unquantized())
+                Length::from(
+                    measure_info.length.get() - self.position(),
+                )
             }
             None => {
-                let measure =
-                    rea_rs::Measure::from_index(self.measure_index, &project);
+                let measure = rea_rs::Measure::from_index(
+                    self.measure_index,
+                    &project,
+                );
                 let measure_length = Length::from(
                     measure.end.as_quarters(&project)
                         - measure.start.as_quarters(&project),
                 );
-                Length::from(measure_length.get_unquantized() - self.position_unquantized())
+                Length::from(measure_length.get() - self.position())
             }
         }
     }
@@ -358,13 +378,18 @@ impl GenericPosition for RelativePosition {
     ) -> AbsolutePosition {
         let project = Reaper::get().current_project();
         match time_map {
-            Some(time_map) => time_map.pos_absolute_from_relative(self),
+            Some(time_map) => {
+                time_map.pos_absolute_from_relative(self)
+            }
             None => {
-                let measure =
-                    rea_rs::Measure::from_index(self.measure_index, &project);
+                let measure = rea_rs::Measure::from_index(
+                    self.measure_index,
+                    &project,
+                );
                 AbsolutePosition::from(
-                    Fraction::from(measure.start.as_quarters(&project) / 4.0)
-                        + self.position_unquantized(),
+                    Fraction::from(
+                        measure.start.as_quarters(&project) / 4.0,
+                    ) + self.position(),
                 )
             }
         }
@@ -391,10 +416,15 @@ impl From<rea_rs::Position> for RelativePosition {
 impl Into<rea_rs::Position> for RelativePosition {
     fn into(self) -> rea_rs::Position {
         let project = Reaper::get().current_project();
-        let measure = Measure::from_index(self.measure_index, &project);
+        let measure =
+            Measure::from_index(self.measure_index, &project);
         let quarters = measure.start.as_quarters(&project)
-            + (*self.measure_position.numer().expect("bad fraction") as f64
-                / *self.measure_position.denom().expect("bad fraction")
+            + (*self.measure_position.numer().expect("bad fraction")
+                as f64
+                / *self
+                    .measure_position
+                    .denom()
+                    .expect("bad fraction")
                     as f64);
         rea_rs::Position::from_quarters(quarters, &project)
     }
@@ -408,16 +438,22 @@ impl From<AbsolutePosition> for RelativePosition {
 impl Add for RelativePosition {
     fn add(self, rhs: Self) -> Self::Output {
         assert_eq!(self.measure_index, rhs.measure_index);
-        Self::new(self.measure_index, self.position_unquantized() + rhs.position_unquantized())
+        Self::new(
+            self.measure_index,
+            self.position() + rhs.position(),
+        )
     }
     type Output = Self;
 }
 impl Sub for RelativePosition {
     fn sub(self, rhs: Self) -> Self::Output {
         assert_eq!(self.measure_index, rhs.measure_index);
-        let new = self.position_unquantized() + rhs.position_unquantized();
+        let new = self.position() + rhs.position();
         assert!(new.is_normal());
-        assert!(new.is_sign_positive(), "resulted position is negative");
+        assert!(
+            new.is_sign_positive(),
+            "resulted position is negative"
+        );
         Self::new(self.measure_index, new)
     }
     type Output = Self;

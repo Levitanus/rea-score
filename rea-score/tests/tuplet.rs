@@ -20,8 +20,7 @@ fn triplet() {
     let eight = EventInfo::new(
         RelativePosition::new(
             1,
-            start.position_unquantized()
-                + Fraction::new(2_u8, 12_u8),
+            start.position() + Fraction::new(2_u8, 12_u8),
         ),
         Length::from(Fraction::new(1_u8, 12_u8)),
         rea_score::primitives::EventType::Note(Note::new(
@@ -40,10 +39,7 @@ fn triplet() {
         triplet.render_lilypond(),
         r"\tuplet 3/2 { c'4 c'8 }"
     );
-    // }
 
-    // #[test]
-    // fn triplet_with_rest() {
     let start = RelativePosition::new(1, Fraction::new(1_u8, 4_u8));
     let a = EventInfo::new(
         RelativePosition::new(1, Fraction::new(3_u8, 12_u8)),

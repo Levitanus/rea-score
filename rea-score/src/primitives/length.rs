@@ -14,10 +14,10 @@ pub struct Length {
     fraction: Fraction,
 }
 impl Length {
-    pub fn get(&self) -> Fraction {
+    pub fn get_quantized(&self) -> Fraction {
         limit_denominator(self.fraction, LIMIT_DENOMINATOR).unwrap()
     }
-    pub fn get_unquantized(&self) -> Fraction {
+    pub fn get(&self) -> Fraction {
         self.fraction.clone()
     }
     pub fn get_quantized_to(&self, denom: u64) -> Fraction {
@@ -26,10 +26,10 @@ impl Length {
 }
 impl PartialEq for Length {
     fn eq(&self, other: &Self) -> bool {
-        self.get() == other.get()
+        self.get_quantized() == other.get_quantized()
     }
     fn ne(&self, other: &Self) -> bool {
-        self.get() != other.get()
+        self.get_quantized() != other.get_quantized()
     }
 }
 impl From<Fraction> for Length {
@@ -62,19 +62,19 @@ impl From<Position> for Length {
 impl Add for Length {
     fn add(self, rhs: Self) -> Self::Output {
         Self {
-            fraction: self.get() + rhs.get(),
+            fraction: self.get_quantized() + rhs.get_quantized(),
         }
     }
     type Output = Self;
 }
 impl Sub for Length {
     fn sub(self, rhs: Self) -> Self::Output {
-        let frac = self.get() - rhs.get();
+        let frac = self.get_quantized() - rhs.get_quantized();
         if frac.is_sign_negative() {
             panic!(
                 "length can not be negative. left: {}, right: {}, result: {}",
-                self.get(),
-                rhs.get(),
+                self.get_quantized(),
+                rhs.get_quantized(),
                 frac
             );
         }
@@ -84,16 +84,16 @@ impl Sub for Length {
 }
 impl RendersToLilypond for Length {
     fn render_lilypond(&self) -> String {
-        match self.get().numer().unwrap() {
+        match self.get_quantized().numer().unwrap() {
             1_u64 => format!(
                 "{}",
-                self.get().denom().expect("No Denominator in Length")
+                self.get_quantized().denom().expect("No Denominator in Length")
             ),
-            3_u64 => match *self.get().denom().expect("No Denominator in Length"){
+            3_u64 => match *self.get_quantized().denom().expect("No Denominator in Length"){
                     x if x >1=>format!("{}.",x/2),
                     _ => "\\breve.".to_string()
                 },
-            _ => panic!("Invalid Length to render: {:?}. What happens if normalize it? : {:?}", self, normalize_fraction(self.get(), Vec::new().into())),
+            _ => panic!("Invalid Length to render: {:?}. What happens if normalize it? : {:?}", self, normalize_fraction(self.get_quantized(), Vec::new().into())),
         }
     }
 }
@@ -111,7 +111,7 @@ mod tests {
         assert_eq!(a, b);
         assert_eq!(a.clone() + b.clone(), Length::from(2.0));
         assert_eq!(
-            Length::from(1.0 / 129.0).get(),
+            Length::from(1.0 / 129.0).get_quantized(),
             Fraction::new(1u64, 128u64)
         );
         assert_eq!(

@@ -9,8 +9,9 @@ pub type TimeMapMeasures = Vec<MeasureInfo>;
 
 /// Represents area of timeline, that should be exported.
 ///
-/// Considered to be used as reference for building voices, navigating
-/// through them and converting positions from absolute to relative.
+/// Considered to be used as reference for building voices,
+/// navigating through them and converting positions from absolute to
+/// relative.
 #[derive(Debug)]
 pub struct TimeMap {
     /// indexes are measure numbers on timeline (1-based)
@@ -79,10 +80,13 @@ impl TimeMap {
         absolute: &AbsolutePosition,
     ) -> Option<RelativePosition> {
         match self.get_measure_from_absolute_position(absolute) {
-            Some((measure, measure_start)) => Some(RelativePosition::new(
-                measure.index,
-                absolute.get() - measure_start.get(),
-            )),
+            Some((measure, measure_start)) => {
+                Some(RelativePosition::new(
+                    measure.index,
+                    absolute.get_quantized()
+                        - measure_start.get_quantized(),
+                ))
+            }
             None => None,
         }
     }
@@ -91,11 +95,15 @@ impl TimeMap {
         relative: &RelativePosition,
     ) -> AbsolutePosition {
         let measure_index = relative.get_measure_index();
-        let m_pos = self.get_absolute_position_of_measure(measure_index);
-        let relative_pos = relative.position();
-        AbsolutePosition::from(m_pos.get() + relative_pos)
+        let m_pos =
+            self.get_absolute_position_of_measure(measure_index);
+        let relative_pos = relative.position_quantized();
+        AbsolutePosition::from(m_pos.get_quantized() + relative_pos)
     }
-    pub fn get_measure_info(&self, measure_index: u32) -> MeasureInfo {
+    pub fn get_measure_info(
+        &self,
+        measure_index: u32,
+    ) -> MeasureInfo {
         self.measures[(&measure_index - self.begin) as usize].clone()
     }
     pub fn get(&self) -> &Vec<MeasureInfo> {
@@ -106,7 +114,8 @@ impl TimeMap {
         start_pos: impl Into<Position>,
         end_pos: impl Into<Position>,
     ) -> Self {
-        let (start_pos, end_pos) = (start_pos.into(), end_pos.into());
+        let (start_pos, end_pos) =
+            (start_pos.into(), end_pos.into());
         let project = Reaper::get().current_project();
         let start_measure =
             rea_rs::Measure::from_position(start_pos, &project);
@@ -117,12 +126,13 @@ impl TimeMap {
         }
         let start = AbsolutePosition::from(start_measure.start);
         let measures = Vec::from_iter(
-            (start_measure.index..(end_measure.index)).into_iter().map(
-                |idx| {
-                    let measure = rea_rs::Measure::from_index(idx, &project);
+            (start_measure.index..(end_measure.index))
+                .into_iter()
+                .map(|idx| {
+                    let measure =
+                        rea_rs::Measure::from_index(idx, &project);
                     MeasureInfo::new(idx, measure.time_signature)
-                },
-            ),
+                }),
         );
         Self::new(measures, start)
     }
@@ -163,7 +173,9 @@ mod tests {
 
     use super::{MeasureInfo, TimeMap, TimeMapMeasures};
 
-    fn measures_from_ts(info: Vec<(u32, TimeSignature)>) -> TimeMapMeasures {
+    fn measures_from_ts(
+        info: Vec<(u32, TimeSignature)>,
+    ) -> TimeMapMeasures {
         let mut measures = Vec::new();
         for (idx, time_signature) in info {
             let length = Length::from(&time_signature);
@@ -268,7 +280,8 @@ mod tests {
                 position_5
             );
             let position_6 = AbsolutePosition::from(
-                position_5.get() + Fraction::new(9u64, 8u64),
+                position_5.get_quantized()
+                    + Fraction::new(9u64, 8u64),
             );
             assert_eq!(
                 time_map.get_absolute_position_of_measure(6),
@@ -284,8 +297,12 @@ mod tests {
             8 * 3 + 7 + 3 as u64,
             8 as u64,
         ));
-        let relative = RelativePosition::new(5, Fraction::new(3u64, 8u64));
-        assert_eq!(&time_map.pos_absolute_from_relative(&relative), &absolute);
+        let relative =
+            RelativePosition::new(5, Fraction::new(3u64, 8u64));
+        assert_eq!(
+            &time_map.pos_absolute_from_relative(&relative),
+            &absolute
+        );
         assert_eq!(
             &time_map.pos_relative_from_absolute(&absolute).unwrap(),
             &relative
@@ -295,8 +312,12 @@ mod tests {
             8 * 3 + 7 + 9 + 3 as u64,
             8 as u64,
         ));
-        let relative = RelativePosition::new(6, Fraction::new(3u64, 8u64));
-        assert_eq!(&time_map.pos_absolute_from_relative(&relative), &absolute);
+        let relative =
+            RelativePosition::new(6, Fraction::new(3u64, 8u64));
+        assert_eq!(
+            &time_map.pos_absolute_from_relative(&relative),
+            &absolute
+        );
         assert_eq!(
             &time_map.pos_relative_from_absolute(&absolute).unwrap(),
             &relative

@@ -9,11 +9,16 @@ use rea_score::{
 use std::error::Error;
 
 #[reaper_extension_plugin]
-fn test_extension(context: PluginContext) -> Result<(), Box<dyn Error>> {
+fn test_extension(
+    context: PluginContext,
+) -> Result<(), Box<dyn Error>> {
     let test = ReaperTest::setup(context, "test_action");
     test.push_test_step(TestStep::new("Positions", positions));
     test.push_test_step(TestStep::new("Simple Parse", simple_parse));
-    test.push_test_step(TestStep::new("Regress Parse", regress_parse));
+    test.push_test_step(TestStep::new(
+        "Regress Parse",
+        regress_parse,
+    ));
     Ok(())
 }
 
@@ -42,7 +47,10 @@ fn positions(reaper: &mut Reaper) -> TestStepResult {
     let rel_pos = RelativePosition::from(abs_pos.clone());
 
     assert_eq!(pos, Position::from_quarters(1.0, &pr));
-    assert_eq!(abs_pos.get(), (pos.as_quarters(&pr) / 4.0).into());
+    assert_eq!(
+        abs_pos.get_quantized(),
+        (pos.as_quarters(&pr) / 4.0).into()
+    );
     assert_eq!(
         rel_pos,
         RelativePosition::new(1, Fraction::new(1_u64, 4_u64))
@@ -55,8 +63,9 @@ fn simple_parse(reaper: &mut Reaper) -> TestStepResult {
     let mut pr = setup_project(reaper);
     let mut item = pr.get_selected_item_mut(0).unwrap();
     let mut take = item.active_take_mut();
-    let events = parse_events(simple_parse_data::data().into_iter(), &take)
-        .expect("Can not parse events.");
+    let events =
+        parse_events(simple_parse_data::data().into_iter(), &take)
+            .expect("Can not parse events.");
     // assert_eq!(events, simple_parse_data::expected());
     events
         .zip(simple_parse_data::expected().into_iter())
@@ -66,8 +75,10 @@ fn simple_parse(reaper: &mut Reaper) -> TestStepResult {
         .count();
 
     take.set_midi(
-        rea_rs::MidiEventConsumer::new(simple_parse_data::data().into_iter())
-            .collect(),
+        rea_rs::MidiEventConsumer::new(
+            simple_parse_data::data().into_iter(),
+        )
+        .collect(),
     )
     .expect("Can not set take midi!");
 
@@ -92,9 +103,11 @@ fn regress_parse(reaper: &mut Reaper) -> TestStepResult {
     let mut pr = setup_project(reaper);
     let mut item = pr.get_selected_item_mut(0).unwrap();
     let mut take = item.active_take_mut();
-    let events =
-        parse_events(simple_parse_data::regress1_data().into_iter(), &take)
-            .expect("Can not parse events.");
+    let events = parse_events(
+        simple_parse_data::regress1_data().into_iter(),
+        &take,
+    )
+    .expect("Can not parse events.");
     events
         .zip(simple_parse_data::regress1_expected().into_iter())
         .map(|t| {
