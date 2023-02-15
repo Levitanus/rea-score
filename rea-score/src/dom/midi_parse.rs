@@ -19,7 +19,13 @@ pub fn parse_events<'a, T: ProbablyMutable>(
     take: &'a Take<T>,
 ) -> Result<Box<dyn Iterator<Item = ParsedEvent> + 'a>, ReaperError>
 {
-    let notes = rea_rs::FilterNotes::new(events.clone());
+    let mut notes: Vec<_> =
+        rea_rs::FilterNotes::new(events.clone()).collect();
+    notes.sort_by(|a, b| {
+        a.start_in_ppq
+            .partial_cmp(&b.start_in_ppq)
+            .expect("can not compare event positions")
+    });
     let notations = events
         .filter_map(|ev| {
             let msg = ev.message().get_raw();
@@ -29,7 +35,7 @@ pub fn parse_events<'a, T: ProbablyMutable>(
             ))
         })
         .collect::<Vec<_>>();
-    let parsed_events = notes.map(move |note| {
+    let parsed_events = notes.into_iter().map(move |note| {
         let position =
             RelativePosition::from(AbsolutePosition::from(
                 Position::from_ppq(note.start_in_ppq, take),
@@ -281,10 +287,10 @@ impl ParsedEvent {
         self.notations = self
             .notations
             .into_iter()
-            .filter_map(|not| {
-                match self.event.push_notation(not.clone()) {
+            .filter_map(|note| {
+                match self.event.push_notation(note.clone()) {
                     Ok(_) => None,
-                    Err(_) => Some(not),
+                    Err(_) => Some(note),
                 }
             })
             .collect();
